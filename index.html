@@ -142,6 +142,7 @@
                     await db.collection('jobs').doc(jobObj.id).set(jobObj);
                 } catch (err) {
                     console.error("Error saving job:", err);
+                    alert("Error saving job to database. Check console logs.");
                 }
             };
 
@@ -236,17 +237,23 @@
                     newNoteText: ''
                 };
 
-                if (!clients.some(c => c.name.toLowerCase() === clientName.toLowerCase())) {
-                    await db.collection('clients').add({ name: clientName, address: clientAddress });
-                }
+                try {
+                    if (!clients.some(c => c.name.toLowerCase() === clientName.toLowerCase())) {
+                        await db.collection('clients').add({ name: clientName, address: clientAddress });
+                    }
 
-                await saveJobToCloud(newJob);
-                setShowCreateModal(false);
-                setNewJobTitle('');
-                setNewJobClient('');
-                setNewJobAddress('');
-                setClientSuggestions([]);
-                setIsClientSelected(false);
+                    await saveJobToCloud(newJob);
+                    
+                    setShowCreateModal(false);
+                    setNewJobTitle('');
+                    setNewJobClient('');
+                    setNewJobAddress('');
+                    setClientSuggestions([]);
+                    setIsClientSelected(false);
+                } catch (err) {
+                    console.error("Failed to create job:", err);
+                    alert("Failed to save job. Please check your internet connection.");
+                }
             };
 
             const handleSendPing = (e) => {
@@ -1475,7 +1482,7 @@
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-gray-700 mb-1">Date</label>
-                                        <input type="date" value={newJobDate} onChange={(e) => setNewJobDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-xs" required />
+                                        <input type="date" value={newJobDate} onChange={(e) => setNewJobDate(e.target.value)} className="w-full px-3py-2 border rounded-lg text-xs" required />
                                     </div>
                                     <div className="flex justify-end space-x-2 pt-2">
                                         <button type="button" onClick={() => setShowCreateModal(false)} className="px-3 py-1.5 border rounded-lg text-xs">Cancel</button>
