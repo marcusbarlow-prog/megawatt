@@ -182,7 +182,7 @@
 
             const selectExistingClient = (c) => {
                 setNewJobClient(c.name);
-                setNewJobAddress(c.address);
+                setNewJobAddress(c.address || '');
                 setClientSuggestions([]);
                 setIsClientSelected(true);
             };
@@ -1424,7 +1424,7 @@
                                             />
                                             {clientSuggestions.length > 0 && !isClientSelected && (
                                                 <div className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                                                    {clientSuggestions.map((c, i) => (
+                                                    {clientSuggestions.link ? null : clientSuggestions.map((c, i) => (
                                                         <div key={i} onClick={() => selectExistingClient(c)} className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer border-b last:border-b-0">
                                                             <strong>{c.name}</strong> <span className="text-gray-400 block text-[10px]">{c.address}</span>
                                                         </div>
