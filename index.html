@@ -9,27 +9,30 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- FIREBASE SDK SCRIPTS -->
+    <!-- FIREBASE SDK SCRIPTS (COMPAT VERSION FOR BROWSER SCRIPT TAGS) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
     <div id="root"></div>
 
     <script type="text/babel">
-        // TODO: PASTE YOUR FIREBASE CONFIGURATION HERE FROM STEP 1
+        // YOUR FIREBASE CONFIGURATION (INTEGRATED)
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
+            apiKey: "AIzaSyB8rWkwquB6taF4Pjss3Jwa5viJ1KCoPHo",
+            authDomain: "megawatt-a68a8.firebaseapp.com",
+            projectId: "megawatt-a68a8",
+            storageBucket: "megawatt-a68a8.firebasestorage.app",
+            messagingSenderId: "619892735313",
+            appId: "1:619892735313:web:2063e4fee26f181da06770",
+            measurementId: "G-0S2H504BQK"
         };
 
         // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
+            firebase.analytics?.();
         }
         const db = firebase.firestore();
 
@@ -132,21 +135,12 @@
                     setClients(loadedClients);
                 });
 
-                const unsubParts = db.collection('parts').onSnapshot(snapshot => {
-                    if (!snapshot.empty) {
-                        const loadedParts = snapshot.docs.map(doc => doc.data());
-                        setMasterPartsCatalog(loadedParts);
-                    }
-                });
-
                 return () => {
                     unsubJobs();
                     unsubClients();
-                    unsubParts();
                 };
             }, []);
 
-            // Cloud Database Helper Functions
             const saveJobToCloud = async (jobObj) => {
                 try {
                     await db.collection('jobs').doc(jobObj.id).set(jobObj);
@@ -308,7 +302,7 @@
                 handleUpdateJobInModal({ ...selectedJob, documents: updatedDocs });
             };
 
-            const handleSaveMasterPart = async (e) => {
+            const handleSaveMasterPart = (e) => {
                 e.preventDefault();
                 if (!newPartName.trim()) return;
 
