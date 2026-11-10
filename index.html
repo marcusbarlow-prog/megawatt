@@ -9,7 +9,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- FIREBASE SDK SCRIPTS (COMPAT VERSION FOR BROWSER SCRIPT TAGS) -->
+    <!-- FIREBASE SDK SCRIPTS -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
@@ -18,7 +18,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // YOUR FIREBASE CONFIGURATION (INTEGRATED)
         const firebaseConfig = {
             apiKey: "AIzaSyB8rWkwquB6taF4Pjss3Jwa5viJ1KCoPHo",
             authDomain: "megawatt-a68a8.firebaseapp.com",
@@ -29,7 +28,6 @@
             measurementId: "G-0S2H504BQK"
         };
 
-        // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
             firebase.analytics?.();
@@ -101,7 +99,6 @@
             const [newPartUnit, setNewPartUnit] = React.useState('Unit');
             const [editingPartId, setEditingPartId] = React.useState(null);
 
-            // Cloud States (Synced via Firestore)
             const [jobs, setJobs] = React.useState([]);
             const [clients, setClients] = React.useState([]);
 
@@ -123,7 +120,6 @@
             const [newMaterialItem, setNewMaterialItem] = React.useState(masterPartsCatalog[0]?.name || '');
             const [newMaterialQty, setNewMaterialQty] = React.useState(1);
 
-            // REAL-TIME FIRESTORE SYNC LISTENERS
             React.useEffect(() => {
                 const unsubJobs = db.collection('jobs').onSnapshot(snapshot => {
                     const loadedJobs = snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id }));
@@ -193,10 +189,16 @@
 
             const addNewClientToDatabase = async () => {
                 if (!newJobClient.trim()) return;
-                const newClientObj = { name: newJobClient.trim(), address: newJobAddress.trim() || 'Coffs Harbour NSW' };
-                await db.collection('clients').add(newClientObj);
-                setIsClientSelected(true);
-                setClientSuggestions([]);
+                const clientName = newJobClient.trim();
+                const clientAddress = newJobAddress.trim() || 'Coffs Harbour NSW';
+                
+                try {
+                    await db.collection('clients').add({ name: clientName, address: clientAddress });
+                    setIsClientSelected(true);
+                    setClientSuggestions([]);
+                } catch (err) {
+                    console.error("Error adding client:", err);
+                }
             };
 
             const handleCreateJob = async (e) => {
@@ -207,11 +209,14 @@
                 });
 
                 const jobId = `JOB-${Math.floor(Math.random()*900+100)}`;
+                const clientName = newJobClient || 'General Client';
+                const clientAddress = newJobAddress || 'Coffs Harbour NSW';
+
                 const newJob = {
                     id: jobId,
                     title: newJobTitle || 'Electrical Service',
-                    client: newJobClient || 'General Client',
-                    address: newJobAddress || 'Coffs Harbour NSW',
+                    client: clientName,
+                    address: clientAddress,
                     primaryTech: newJobPrimaryTech,
                     assignedTechs: newJobAssignedTechs,
                     date: newJobDate,
@@ -228,8 +233,8 @@
                     newNoteText: ''
                 };
 
-                if (!clients.some(c => c.name.toLowerCase() === newJobClient.toLowerCase())) {
-                    await db.collection('clients').add({ name: newJobClient, address: newJobAddress });
+                if (!clients.some(c => c.name.toLowerCase() === clientName.toLowerCase())) {
+                    await db.collection('clients').add({ name: clientName, address: clientAddress });
                 }
 
                 await saveJobToCloud(newJob);
