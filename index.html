@@ -8,11 +8,31 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- FIREBASE SDK SCRIPTS -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
     <div id="root"></div>
 
     <script type="text/babel">
+        // TODO: PASTE YOUR FIREBASE CONFIGURATION HERE FROM STEP 1
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
         function App() {
             const [isLoggedIn, setIsLoggedIn] = React.useState(false);
             const [username, setUsername] = React.useState('Marcus Barlow');
@@ -20,32 +40,21 @@
             const [activeTab, setActiveTab] = React.useState('schedule');
             
             const [scheduleView, setScheduleView] = React.useState('week');
-            
-            // DYNAMIC CURRENT DATE INITIALIZATION
             const [currentDate, setCurrentDate] = React.useState(new Date());
             const [filterMyJobsOnly, setFilterMyJobsOnly] = React.useState(false);
             const [globalSearchQuery, setGlobalSearchQuery] = React.useState('');
 
-            // Notifications State
-            const [notifications, setNotifications] = React.useState(() => {
-                const saved = localStorage.getItem('mw_notifications');
-                return saved ? JSON.parse(saved) : [];
-            });
+            const [notifications, setNotifications] = React.useState([]);
             const [pingMessage, setPingMessage] = React.useState('');
             const [pingTargetTech, setPingTargetTech] = React.useState('Taylor Meyrick');
 
-            // Team Members State (Persistent)
-            const [teamMembers, setTeamMembers] = React.useState(() => {
-                const saved = localStorage.getItem('mw_teamMembers');
-                return saved ? JSON.parse(saved) : [
-                    { name: 'Marcus Barlow', role: 'Electrician', access: 'Admin', color: 'bg-blue-50 border-blue-300 text-blue-900' },
-                    { name: 'Taylor Meyrick', role: 'Electrician', access: 'Field Tech', color: 'bg-amber-50 border-amber-300 text-amber-900' },
-                    { name: 'Nic Borrot', role: 'Electrician', access: 'Field Tech', color: 'bg-emerald-50 border-emerald-300 text-emerald-900' },
-                    { name: 'Dave Smith', role: 'Electrician', access: 'Field Tech', color: 'bg-purple-50 border-purple-300 text-purple-900' }
-                ];
-            });
+            const [teamMembers, setTeamMembers] = React.useState([
+                { name: 'Marcus Barlow', role: 'Electrician', access: 'Admin', color: 'bg-blue-50 border-blue-300 text-blue-900' },
+                { name: 'Taylor Meyrick', role: 'Electrician', access: 'Field Tech', color: 'bg-amber-50 border-amber-300 text-amber-900' },
+                { name: 'Nic Borrot', role: 'Electrician', access: 'Field Tech', color: 'bg-emerald-50 border-emerald-300 text-emerald-900' },
+                { name: 'Dave Smith', role: 'Electrician', access: 'Field Tech', color: 'bg-purple-50 border-purple-300 text-purple-900' }
+            ]);
 
-            // Master SWMS Templates (Preserved)
             const [swmsTemplates, setSwmsTemplates] = React.useState([
                 {
                     title: 'Solar Panel Installation',
@@ -74,18 +83,14 @@
             const [newStaffRole, setNewStaffRole] = React.useState('Electrician');
             const [newStaffAccess, setNewStaffAccess] = React.useState('Field Tech');
 
-            // Master Parts Catalog (Persistent)
-            const [masterPartsCatalog, setMasterPartsCatalog] = React.useState(() => {
-                const saved = localStorage.getItem('mw_partsCatalog');
-                return saved ? JSON.parse(saved) : [
-                    { id: 1, sku: 'MC4-PAIR', name: 'MC4 Connectors (Pair)', category: 'Connectors', unit: 'Pair' },
-                    { id: 2, sku: 'DC-CAB-6', name: '6mm² Solar DC Cable (Meters)', category: 'Cabling', unit: 'Meters' },
-                    { id: 3, sku: 'EARTH-10', name: '10mm² Earth Wire (Meters)', category: 'Cabling', unit: 'Meters' },
-                    { id: 4, sku: 'INV-3PH-5', name: '3-Phase 5kW Hybrid Inverter', category: 'Inverters', unit: 'Unit' },
-                    { id: 5, sku: 'PW3-EXP', name: 'Tesla Powerwall 3 Expansion Unit', category: 'Batteries', unit: 'Unit' },
-                    { id: 6, sku: 'ISO-32A', name: '32A AC Isolator Switch', category: 'Switchgear', unit: 'Unit' }
-                ];
-            });
+            const [masterPartsCatalog, setMasterPartsCatalog] = React.useState([
+                { id: 1, sku: 'MC4-PAIR', name: 'MC4 Connectors (Pair)', category: 'Connectors', unit: 'Pair' },
+                { id: 2, sku: 'DC-CAB-6', name: '6mm² Solar DC Cable (Meters)', category: 'Cabling', unit: 'Meters' },
+                { id: 3, sku: 'EARTH-10', name: '10mm² Earth Wire (Meters)', category: 'Cabling', unit: 'Meters' },
+                { id: 4, sku: 'INV-3PH-5', name: '3-Phase 5kW Hybrid Inverter', category: 'Inverters', unit: 'Unit' },
+                { id: 5, sku: 'PW3-EXP', name: 'Tesla Powerwall 3 Expansion Unit', category: 'Batteries', unit: 'Unit' },
+                { id: 6, sku: 'ISO-32A', name: '32A AC Isolator Switch', category: 'Switchgear', unit: 'Unit' }
+            ]);
             const [partsSearchQuery, setPartsSearchQuery] = React.useState('');
             const [newPartName, setNewPartName] = React.useState('');
             const [newPartSku, setNewPartSku] = React.useState('');
@@ -93,17 +98,9 @@
             const [newPartUnit, setNewPartUnit] = React.useState('Unit');
             const [editingPartId, setEditingPartId] = React.useState(null);
 
-            // Jobs State (Persistent)
-            const [jobs, setJobs] = React.useState(() => {
-                const saved = localStorage.getItem('mw_jobs');
-                return saved ? JSON.parse(saved) : [];
-            });
-
-            // Clients Database State (Persistent)
-            const [clients, setClients] = React.useState(() => {
-                const saved = localStorage.getItem('mw_clients');
-                return saved ? JSON.parse(saved) : [];
-            });
+            // Cloud States (Synced via Firestore)
+            const [jobs, setJobs] = React.useState([]);
+            const [clients, setClients] = React.useState([]);
 
             const [selectedJob, setSelectedJob] = React.useState(null);
             const [showCreateModal, setShowCreateModal] = React.useState(false);
@@ -117,35 +114,46 @@
             const [newJobPrimaryTech, setNewJobPrimaryTech] = React.useState('Marcus Barlow');
             const [newJobAssignedTechs, setNewJobAssignedTechs] = React.useState(['Marcus Barlow']);
             const [newJobSwmsTemplate, setNewJobSwmsTemplate] = React.useState('Replacement Inverter');
-            
-            // DYNAMIC INITIAL CREATION DATE
             const [newJobDate, setNewJobDate] = React.useState(new Date().toISOString().split('T')[0]);
             const [draggedJobId, setDraggedJobId] = React.useState(null);
 
-            // Material Input State Inside Job Modal
             const [newMaterialItem, setNewMaterialItem] = React.useState(masterPartsCatalog[0]?.name || '');
             const [newMaterialQty, setNewMaterialQty] = React.useState(1);
 
-            // SAVE TO LOCAL STORAGE ON STATE CHANGE
+            // REAL-TIME FIRESTORE SYNC LISTENERS
             React.useEffect(() => {
-                localStorage.setItem('mw_jobs', JSON.stringify(jobs));
-            }, [jobs]);
+                const unsubJobs = db.collection('jobs').onSnapshot(snapshot => {
+                    const loadedJobs = snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id }));
+                    setJobs(loadedJobs);
+                });
 
-            React.useEffect(() => {
-                localStorage.setItem('mw_clients', JSON.stringify(clients));
-            }, [clients]);
+                const unsubClients = db.collection('clients').onSnapshot(snapshot => {
+                    const loadedClients = snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id }));
+                    setClients(loadedClients);
+                });
 
-            React.useEffect(() => {
-                localStorage.setItem('mw_teamMembers', JSON.stringify(teamMembers));
-            }, [teamMembers]);
+                const unsubParts = db.collection('parts').onSnapshot(snapshot => {
+                    if (!snapshot.empty) {
+                        const loadedParts = snapshot.docs.map(doc => doc.data());
+                        setMasterPartsCatalog(loadedParts);
+                    }
+                });
 
-            React.useEffect(() => {
-                localStorage.setItem('mw_partsCatalog', JSON.stringify(masterPartsCatalog));
-            }, [masterPartsCatalog]);
+                return () => {
+                    unsubJobs();
+                    unsubClients();
+                    unsubParts();
+                };
+            }, []);
 
-            React.useEffect(() => {
-                localStorage.setItem('mw_notifications', JSON.stringify(notifications));
-            }, [notifications]);
+            // Cloud Database Helper Functions
+            const saveJobToCloud = async (jobObj) => {
+                try {
+                    await db.collection('jobs').doc(jobObj.id).set(jobObj);
+                } catch (err) {
+                    console.error("Error saving job:", err);
+                }
+            };
 
             const currentUserObj = teamMembers.find(m => m.name === username) || { access: 'Admin' };
             const isAdmin = currentUserObj.access === 'Admin';
@@ -189,23 +197,24 @@
                 setIsClientSelected(true);
             };
 
-            const addNewClientToDatabase = () => {
+            const addNewClientToDatabase = async () => {
                 if (!newJobClient.trim()) return;
                 const newClientObj = { name: newJobClient.trim(), address: newJobAddress.trim() || 'Coffs Harbour NSW' };
-                setClients([...clients, newClientObj]);
+                await db.collection('clients').add(newClientObj);
                 setIsClientSelected(true);
                 setClientSuggestions([]);
             };
 
-            const handleCreateJob = (e) => {
+            const handleCreateJob = async (e) => {
                 e.preventDefault();
                 const initialSigs = {};
                 newJobAssignedTechs.forEach(t => {
                     initialSigs[t] = { signed: false, timestamp: '' };
                 });
 
+                const jobId = `JOB-${Math.floor(Math.random()*900+100)}`;
                 const newJob = {
-                    id: `JOB-${Math.floor(Math.random()*900+100)}`,
+                    id: jobId,
                     title: newJobTitle || 'Electrical Service',
                     client: newJobClient || 'General Client',
                     address: newJobAddress || 'Coffs Harbour NSW',
@@ -226,10 +235,10 @@
                 };
 
                 if (!clients.some(c => c.name.toLowerCase() === newJobClient.toLowerCase())) {
-                    setClients([...clients, { name: newJobClient, address: newJobAddress }]);
+                    await db.collection('clients').add({ name: newJobClient, address: newJobAddress });
                 }
 
-                setJobs([newJob, ...jobs]);
+                await saveJobToCloud(newJob);
                 setShowCreateModal(false);
                 setNewJobTitle('');
                 setNewJobClient('');
@@ -299,18 +308,19 @@
                 handleUpdateJobInModal({ ...selectedJob, documents: updatedDocs });
             };
 
-            const handleSaveMasterPart = (e) => {
+            const handleSaveMasterPart = async (e) => {
                 e.preventDefault();
                 if (!newPartName.trim()) return;
 
+                let updatedCatalog = [...masterPartsCatalog];
                 if (editingPartId !== null) {
-                    setMasterPartsCatalog(masterPartsCatalog.map(p => p.id === editingPartId ? {
+                    updatedCatalog = updatedCatalog.map(p => p.id === editingPartId ? {
                         ...p,
                         name: newPartName.trim(),
                         sku: newPartSku.trim() || p.sku,
                         category: newPartCategory,
                         unit: newPartUnit
-                    } : p));
+                    } : p);
                     setEditingPartId(null);
                 } else {
                     const newPartObj = {
@@ -320,8 +330,9 @@
                         category: newPartCategory,
                         unit: newPartUnit
                     };
-                    setMasterPartsCatalog([...masterPartsCatalog, newPartObj]);
+                    updatedCatalog.push(newPartObj);
                 }
+                setMasterPartsCatalog(updatedCatalog);
                 setNewPartName('');
                 setNewPartSku('');
             };
@@ -335,7 +346,8 @@
             };
 
             const handleDeleteMasterPart = (partId) => {
-                setMasterPartsCatalog(masterPartsCatalog.filter(p => p.id !== partId));
+                const updated = masterPartsCatalog.filter(p => p.id !== partId);
+                setMasterPartsCatalog(updated);
                 if (editingPartId === partId) {
                     setEditingPartId(null);
                     setNewPartName('');
@@ -409,25 +421,28 @@
                 e.dataTransfer.setData('text/plain', jobId);
             };
 
-            const handleDropOnDate = (e, targetDate) => {
+            const handleDropOnDate = async (e, targetDate) => {
                 e.preventDefault();
                 if (!draggedJobId) return;
-                setJobs(jobs.map(j => j.id === draggedJobId ? { ...j, date: targetDate } : j));
+                const targetJob = jobs.find(j => j.id === draggedJobId);
+                if (targetJob) {
+                    const updated = { ...targetJob, date: targetDate };
+                    await saveJobToCloud(updated);
+                }
                 setDraggedJobId(null);
             };
 
-            const handleDropOnColumn = (e, targetColumn) => {
+            const handleDropOnColumn = async (e, targetColumn) => {
                 e.preventDefault();
                 if (!draggedJobId) return;
-                setJobs(jobs.map(j => {
-                    if (j.id === draggedJobId) {
-                        let newStatus = j.status;
-                        if (targetColumn === 'Completed') newStatus = 'Completed';
-                        else if (targetColumn.includes('Dispatch')) newStatus = 'On Site';
-                        return { ...j, column: targetColumn, status: newStatus };
-                    }
-                    return j;
-                }));
+                const targetJob = jobs.find(j => j.id === draggedJobId);
+                if (targetJob) {
+                    let newStatus = targetJob.status;
+                    if (targetColumn === 'Completed') newStatus = 'Completed';
+                    else if (targetColumn.includes('Dispatch')) newStatus = 'On Site';
+                    const updated = { ...targetJob, column: targetColumn, status: newStatus };
+                    await saveJobToCloud(updated);
+                }
                 setDraggedJobId(null);
             };
 
@@ -435,9 +450,9 @@
                 e.preventDefault();
             };
 
-            const handleUpdateJobInModal = (updatedJob) => {
-                setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j));
+            const handleUpdateJobInModal = async (updatedJob) => {
                 setSelectedJob(updatedJob);
+                await saveJobToCloud(updatedJob);
             };
 
             const handlePhotoUpload = (e) => {
@@ -899,9 +914,6 @@
                                                 </div>
                                             </div>
                                         ))}
-                                        {filteredCatalog.length === 0 && (
-                                            <p className="text-xs text-gray-400 italic py-4">No parts found matching your search query.</p>
-                                        )}
                                     </div>
 
                                     <div className="bg-gray-50 p-4 rounded-xl border space-y-3">
@@ -1117,7 +1129,7 @@
                                         </div>
                                     </div>
 
-                                    {/* SIMPLIFIED ON-SITE TRACKING (START & COMPLETE ONLY) */}
+                                    {/* ON-SITE TRACKING */}
                                     <div className="space-y-2 bg-gray-50 p-4 rounded-xl border">
                                         <h4 className="font-bold text-xs uppercase text-[#1B365D]">⏱️ On-Site Time Tracking</h4>
                                         <div className="grid grid-cols-2 gap-3">
@@ -1158,7 +1170,7 @@
                                         </div>
                                     </div>
 
-                                    {/* JOB DOCUMENTS VAULT */}
+                                    {/* DOCUMENTS VAULT */}
                                     <div className="space-y-3 bg-indigo-50/50 border border-indigo-200 p-4 rounded-xl">
                                         <div className="flex justify-between items-center">
                                             <h4 className="font-bold text-xs uppercase text-[#1B365D]">📂 Client & Job Documents Vault</h4>
@@ -1206,7 +1218,7 @@
                                         </div>
                                     </div>
 
-                                    {/* MATERIALS USED SECTION */}
+                                    {/* MATERIALS USED */}
                                     <div className="space-y-3 bg-blue-50/60 border border-blue-200 p-4 rounded-xl">
                                         <div className="flex justify-between items-center">
                                             <h4 className="font-bold text-xs uppercase text-[#1B365D]">📦 Materials Used & Inventory Log</h4>
