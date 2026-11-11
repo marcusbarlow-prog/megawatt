@@ -52,6 +52,10 @@
             const [filterMyJobsOnly, setFilterMyJobsOnly] = React.useState(false);
             const [globalSearchQuery, setGlobalSearchQuery] = React.useState('');
 
+            const [notifications, setNotifications] = React.useState([]);
+            const [pingMessage, setPingMessage] = React.useState('');
+            const [pingTargetTech, setPingTargetTech] = React.useState('');
+
             const [teamMembers, setTeamMembers] = React.useState([]);
             const [inviteEmail, setInviteEmail] = React.useState('');
             const [inviteName, setInviteName] = React.useState('');
@@ -81,6 +85,21 @@
                 }
             ]);
 
+            const [masterPartsCatalog, setMasterPartsCatalog] = React.useState([
+                { id: 1, sku: 'MC4-PAIR', name: 'MC4 Connectors (Pair)', category: 'Connectors', unit: 'Pair' },
+                { id: 2, sku: 'DC-CAB-6', name: '6mm² Solar DC Cable (Meters)', category: 'Cabling', unit: 'Meters' },
+                { id: 3, sku: 'EARTH-10', name: '10mm² Earth Wire (Meters)', category: 'Cabling', unit: 'Meters' },
+                { id: 4, sku: 'INV-3PH-5', name: '3-Phase 5kW Hybrid Inverter', category: 'Inverters', unit: 'Unit' },
+                { id: 5, sku: 'PW3-EXP', name: 'Tesla Powerwall 3 Expansion Unit', category: 'Batteries', unit: 'Unit' },
+                { id: 6, sku: 'ISO-32A', name: '32A AC Isolator Switch', category: 'Switchgear', unit: 'Unit' }
+            ]);
+            const [partsSearchQuery, setPartsSearchQuery] = React.useState('');
+            const [newPartName, setNewPartName] = React.useState('');
+            const [newPartSku, setNewPartSku] = React.useState('');
+            const [newPartCategory, setNewPartCategory] = React.useState('Cabling');
+            const [newPartUnit, setNewPartUnit] = React.useState('Unit');
+            const [editingPartId, setEditingPartId] = React.useState(null);
+
             const [jobs, setJobs] = React.useState([]);
             const [clients, setClients] = React.useState([]);
 
@@ -89,12 +108,19 @@
             const [newJobTitle, setNewJobTitle] = React.useState('');
             const [newJobClient, setNewJobClient] = React.useState('');
             const [newJobAddress, setNewJobAddress] = React.useState('');
+            
+            const [clientSuggestions, setClientSuggestions] = React.useState([]);
+            const [isClientSelected, setIsClientSelected] = React.useState(false);
+
             const [newJobPrimaryTech, setNewJobPrimaryTech] = React.useState('');
             const [newJobAssignedTechs, setNewJobAssignedTechs] = React.useState([]);
             const [newJobSwmsTemplate, setNewJobSwmsTemplate] = React.useState('Replacement Inverter');
             const [newJobDate, setNewJobDate] = React.useState(new Date().toISOString().split('T')[0]);
+            const [draggedJobId, setDraggedJobId] = React.useState(null);
 
-            // Unique color palette generator for team members
+            const [newMaterialItem, setNewMaterialItem] = React.useState(masterPartsCatalog[0]?.name || '');
+            const [newMaterialQty, setNewMaterialQty] = React.useState(1);
+
             const colorPalette = [
                 'bg-blue-50 border-blue-300 text-blue-900',
                 'bg-amber-50 border-amber-300 text-amber-900',
@@ -105,7 +131,7 @@
                 'bg-indigo-50 border-indigo-300 text-indigo-900'
             ];
 
-            // Listen to Firebase Auth state & check if user needs to setup their name
+            // Listen to Firebase Auth state
             React.useEffect(() => {
                 const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
                     if (user) {
@@ -119,7 +145,6 @@
                             setUserRole(doc.data().access || 'Field Tech');
                             setShowNameModal(false);
                         } else {
-                            // If profile doesn't exist or name is missing, pop open setup modal
                             setShowNameModal(true);
                         }
                     } else {
@@ -137,15 +162,19 @@
 
                 const unsubJobs = db.collection('jobs').onSnapshot(snapshot => {
                     setJobs(snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id })));
-                });
+                }, err => console.error("Jobs sync error:", err));
 
                 const unsubClients = db.collection('clients').onSnapshot(snapshot => {
                     setClients(snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id })));
-                });
+                }, err => console.error("Clients sync error:", err));
 
                 const unsubTeam = db.collection('users').onSnapshot(snapshot => {
-                    setTeamMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                });
+                    const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setTeamMembers(members);
+                    if (members.length > 0 && !pingTargetTech) {
+                        setPingTargetTech(members[0].name || members[0].email);
+                    }
+                }, err => console.error("Team sync error:", err));
 
                 return () => {
                     unsubJobs();
@@ -232,18 +261,37 @@
                 }
             };
 
-            const saveJobToCloud = async (jobObj) => {
-                try {
-                    await db.collection('jobs').doc(jobObj.id).set(jobObj);
-                } catch (err) {
-                    console.error("Error saving job:", err);
+            const handleClientInput = (val) => {
+                setNewJobClient(val);
+                setIsClientSelected(false);
+                if (val.trim().length > 0) {
+                    const matches = clients.filter(c => c.name.toLowerCase().includes(val.toLowerCase()));
+                    setClientSuggestions(matches);
+                } else {
+                    setClientSuggestions([]);
                 }
             };
 
-            const getTechColorStyle = (techName) => {
-                if (!techName) return 'bg-gray-50 border-dashed border-gray-300 text-gray-500';
-                const tech = teamMembers.find(m => m.name === techName || m.email === techName);
-                return tech ? tech.color : 'bg-gray-50 border-gray-200 text-gray-800';
+            const selectExistingClient = (c) => {
+                setNewJobClient(c.name);
+                setNewJobAddress(c.address || '');
+                setClientSuggestions([]);
+                setIsClientSelected(true);
+            };
+
+            const addNewClientToDatabase = async () => {
+                if (!newJobClient.trim()) return;
+                const clientName = newJobClient.trim();
+                const clientAddress = newJobAddress.trim() || 'Coffs Harbour NSW';
+                
+                try {
+                    await db.collection('clients').add({ name: clientName, address: clientAddress });
+                    if (!newJobAddress.trim()) setNewJobAddress(clientAddress);
+                    setIsClientSelected(true);
+                    setClientSuggestions([]);
+                } catch (err) {
+                    console.error("Error adding client:", err);
+                }
             };
 
             const handleCreateJob = async (e) => {
@@ -263,11 +311,14 @@
                 const nextSeqNum = String(maxNum + 1).padStart(3, '0');
                 const jobId = `${nextSeqNum}${yearPrefix}`;
 
+                const clientName = newJobClient || 'General Client';
+                const clientAddress = newJobAddress || 'Coffs Harbour NSW';
+
                 const newJob = {
                     id: jobId,
                     title: newJobTitle || 'Electrical Service',
-                    client: newJobClient || 'General Client',
-                    address: newJobAddress || 'Coffs Harbour NSW',
+                    client: clientName,
+                    address: clientAddress,
                     primaryTech: newJobPrimaryTech,
                     assignedTechs: newJobAssignedTechs,
                     date: newJobDate,
@@ -280,24 +331,217 @@
                     documents: [],
                     timeLogs: { startTime: '', completeTime: '' },
                     notesLog: [],
-                    photos: []
+                    photos: [],
+                    newNoteText: ''
                 };
 
-                await saveJobToCloud(newJob);
-                setShowCreateModal(false);
-                setNewJobTitle('');
-                setNewJobClient('');
-                setNewJobAddress('');
+                try {
+                    if (!clients.some(c => c.name.toLowerCase() === clientName.toLowerCase())) {
+                        await db.collection('clients').add({ name: clientName, address: clientAddress });
+                    }
+                    await db.collection('jobs').doc(newJob.id).set(newJob);
+                    setShowCreateModal(false);
+                    setNewJobTitle('');
+                    setNewJobClient('');
+                    setNewJobAddress('');
+                    setClientSuggestions([]);
+                    setIsClientSelected(false);
+                } catch (err) {
+                    console.error("Failed to create job:", err);
+                }
+            };
+
+            const handleSendPing = (e) => {
+                e.preventDefault();
+                if (!pingMessage.trim()) return;
+                const newAlert = {
+                    id: Date.now(),
+                    recipient: pingTargetTech,
+                    sender: currentUser?.email,
+                    message: pingMessage.trim(),
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    read: false
+                };
+                setNotifications([newAlert, ...notifications]);
+                setPingMessage('');
+                alert(`Dispatch alert successfully sent to ${pingTargetTech}!`);
+            };
+
+            const handleAddMaterialToJob = () => {
+                if (!selectedJob || !newMaterialItem) return;
+                const existing = selectedJob.materialsUsed || [];
+                const newItemObj = { id: Date.now(), item: newMaterialItem, qty: Number(newMaterialQty) || 1 };
+                handleUpdateJobInModal({ ...selectedJob, materialsUsed: [...existing, newItemObj] });
+            };
+
+            const handleDeleteMaterialFromJob = (matId) => {
+                if (!selectedJob) return;
+                const updated = (selectedJob.materialsUsed || []).filter(m => m.id !== matId);
+                handleUpdateJobInModal({ ...selectedJob, materialsUsed: updated });
+            };
+
+            const handleFileUpload = (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0 || !selectedJob) return;
+
+                const newDocs = files.map(file => {
+                    let fileType = 'doc';
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    if (ext === 'pdf') fileType = 'pdf';
+                    else if (['xls', 'xlsx', 'csv'].includes(ext)) fileType = 'sheet';
+
+                    const sizeKb = (file.size / 1024).toFixed(0);
+                    const sizeFormatted = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+
+                    return {
+                        id: Date.now() + Math.random(),
+                        name: file.name,
+                        size: sizeFormatted,
+                        type: fileType,
+                        url: URL.createObjectURL(file)
+                    };
+                });
+
+                const updatedDocs = [...(selectedJob.documents || []), ...newDocs];
+                handleUpdateJobInModal({ ...selectedJob, documents: updatedDocs });
+            };
+
+            const handleDeleteDocument = (docId) => {
+                if (!selectedJob) return;
+                const updatedDocs = (selectedJob.documents || []).filter(d => d.id !== docId);
+                handleUpdateJobInModal({ ...selectedJob, documents: updatedDocs });
+            };
+
+            const handleSaveMasterPart = (e) => {
+                e.preventDefault();
+                if (!newPartName.trim()) return;
+
+                let updatedCatalog = [...masterPartsCatalog];
+                if (editingPartId !== null) {
+                    updatedCatalog = updatedCatalog.map(p => p.id === editingPartId ? {
+                        ...p,
+                        name: newPartName.trim(),
+                        sku: newPartSku.trim() || p.sku,
+                        category: newPartCategory,
+                        unit: newPartUnit
+                    } : p);
+                    setEditingPartId(null);
+                } else {
+                    const newPartObj = {
+                        id: Date.now(),
+                        sku: newPartSku.trim() || `SKU-${Math.floor(Math.random()*9000+1000)}`,
+                        name: newPartName.trim(),
+                        category: newPartCategory,
+                        unit: newPartUnit
+                    };
+                    updatedCatalog.push(newPartObj);
+                }
+                setMasterPartsCatalog(updatedCatalog);
+                setNewPartName('');
+                setNewPartSku('');
+            };
+
+            const handleEditMasterPart = (part) => {
+                setEditingPartId(part.id);
+                setNewPartName(part.name);
+                setNewPartSku(part.sku);
+                setNewPartCategory(part.category);
+                setNewPartUnit(part.unit);
+            };
+
+            const handleDeleteMasterPart = (partId) => {
+                setMasterPartsCatalog(masterPartsCatalog.filter(p => p.id !== partId));
+                if (editingPartId === partId) {
+                    setEditingPartId(null);
+                    setNewPartName('');
+                    setNewPartSku('');
+                }
+            };
+
+            const handleNavigateTime = (direction) => {
+                const newDate = new Date(currentDate);
+                if (scheduleView === 'day') newDate.setDate(newDate.getDate() + direction);
+                else if (scheduleView === 'week') newDate.setDate(newDate.getDate() + (direction * 7));
+                else if (scheduleView === 'month') newDate.setMonth(newDate.getMonth() + direction);
+                setCurrentDate(newDate);
+                setNewJobDate(newDate.toISOString().split('T')[0]);
+            };
+
+            const handleDragStart = (e, jobId) => {
+                setDraggedJobId(jobId);
+                e.dataTransfer.setData('text/plain', jobId);
+            };
+
+            const handleDropOnDate = async (e, targetDate) => {
+                e.preventDefault();
+                if (!draggedJobId) return;
+                const targetJob = jobs.find(j => j.id === draggedJobId);
+                if (targetJob) {
+                    const updated = { ...targetJob, date: targetDate };
+                    await db.collection('jobs').doc(updated.id).set(updated);
+                }
+                setDraggedJobId(null);
+            };
+
+            const handleDropOnColumn = async (e, targetColumn) => {
+                e.preventDefault();
+                if (!draggedJobId) return;
+                const targetJob = jobs.find(j => j.id === draggedJobId);
+                if (targetJob) {
+                    let newStatus = targetJob.status;
+                    if (targetColumn === 'Completed') newStatus = 'Completed';
+                    else if (targetColumn.includes('Dispatch')) newStatus = 'On Site';
+                    const updated = { ...targetJob, column: targetColumn, status: newStatus };
+                    await db.collection('jobs').doc(updated.id).set(updated);
+                }
+                setDraggedJobId(null);
+            };
+
+            const handleDragOver = (e) => { e.preventDefault(); };
+
+            const handleUpdateJobInModal = async (updatedJob) => {
+                setSelectedJob(updatedJob);
+                await db.collection('jobs').doc(updatedJob.id).set(updatedJob);
+            };
+
+            const handlePhotoUpload = (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0 || !selectedJob) return;
+                const newPhotoUrls = files.map(file => URL.createObjectURL(file));
+                const updatedPhotos = [...(selectedJob.photos || []), ...newPhotoUrls];
+                handleUpdateJobInModal({ ...selectedJob, photos: updatedPhotos });
             };
 
             const displayedJobs = jobs.filter(job => {
-                if (filterMyJobsOnly && !job.assignedTechs?.includes(currentUser?.email)) return false;
+                if (filterMyJobsOnly && !job.assignedTechs?.some(t => teamMembers.find(m => m.name === t)?.email === currentUser?.email)) return false;
                 if (globalSearchQuery.trim().length > 0) {
                     const q = globalSearchQuery.toLowerCase();
-                    return job.client?.toLowerCase().includes(q) || job.id?.toLowerCase().includes(q) || job.address?.toLowerCase().includes(q);
+                    return job.client?.toLowerCase().includes(q) || job.id?.toLowerCase().includes(q) || job.address?.toLowerCase().includes(q) || job.title?.toLowerCase().includes(q);
                 }
                 return true;
             });
+
+            const filteredCatalog = masterPartsCatalog.filter(p => {
+                if (!partsSearchQuery.trim()) return true;
+                const q = partsSearchQuery.toLowerCase();
+                return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
+            });
+
+            const getTechColorStyle = (techName) => {
+                if (!techName) return 'bg-gray-50 border-dashed border-gray-300 text-gray-500';
+                const tech = teamMembers.find(m => m.name === techName);
+                return tech ? tech.color : 'bg-gray-50 border-gray-200 text-gray-800';
+            };
+
+            const hasUnsignedSwms = (job) => {
+                if (!job.assignedTechs || job.assignedTechs.length === 0) return false;
+                return job.assignedTechs.some(tech => !job.swmsSignatures?.[tech]?.signed);
+            };
+
+            const openGoogleMaps = (address) => {
+                if (!address) return;
+                window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank');
+            };
 
             if (!isLoggedIn) {
                 return (
@@ -356,7 +600,7 @@
                                             type="text" 
                                             value={profileInputName} 
                                             onChange={(e) => setProfileInputName(e.target.value)} 
-                                            placeholder="e.g. Taylor Meyrick" 
+                                            placeholder="e.g. Marcus Barlow" 
                                             className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 font-semibold" 
                                             required 
                                         />
@@ -390,6 +634,12 @@
                                         >
                                             📦 Parts
                                         </button>
+                                        <button 
+                                            onClick={() => setActiveTab('swms')} 
+                                            className={`text-[11px] font-bold px-2 py-1 rounded shadow transition ${activeTab === 'swms' ? 'bg-[#00AEEF] text-[#1B365D]' : 'bg-[#284b7c] text-white'}`}
+                                        >
+                                            🛡️ SWMS
+                                        </button>
                                     </div>
                                 )}
                             </div>
@@ -403,37 +653,91 @@
                                 </button>
                             </div>
 
-                            <div className="flex items-center justify-end space-x-2">
+                            <div className="flex items-center justify-end space-x-2 flex-wrap gap-y-2">
+                                <div className="relative flex-1 md:flex-initial">
+                                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-xs text-gray-400">🔍</span>
+                                    <input 
+                                        type="text"
+                                        value={globalSearchQuery}
+                                        onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                                        placeholder="Search address, client, ID..."
+                                        className="bg-[#244573] text-white placeholder-gray-300 text-xs pl-8 pr-3 py-1.5 rounded-xl border border-[#00AEEF]/40 focus:outline-none focus:ring-2 focus:ring-[#00AEEF] w-full md:w-48 font-medium shadow-inner"
+                                    />
+                                    {globalSearchQuery && (
+                                        <button onClick={() => setGlobalSearchQuery('')} className="absolute inset-y-0 right-0 pr-2 flex items-center text-xs text-gray-300 hover:text-white font-bold">&times;</button>
+                                    )}
+                                </div>
+
                                 {isAdmin && (
                                     <button onClick={() => setShowCreateModal(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-extrabold shadow-md">
                                         + New Job
                                     </button>
                                 )}
                                 <div className="flex items-center space-x-1.5 bg-black/20 px-2.5 py-1 rounded-lg border border-white/10 text-xs">
-                                    <span className="font-bold text-[#00AEEF] truncate max-w-[120px]">{currentUser?.email}</span>
+                                    <span className="font-bold text-[#00AEEF] truncate max-w-[100px]">{currentUser?.email}</span>
                                     <span className="bg-amber-400 text-black font-extrabold px-1.5 py-0.5 rounded text-[9px]">{userRole}</span>
-                                    <button onClick={handleLogout} className="text-gray-300 hover:text-white font-semibold ml-2">Logout</button>
+                                    <button onClick={handleLogout} className="text-gray-300 hover:text-white font-semibold ml-1">Logout</button>
                                 </div>
                             </div>
                         </div>
                     </header>
 
                     <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-4">
+                        {isAdmin && (
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-3">
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-lg">💬</span>
+                                    <span className="text-xs font-bold text-[#1B365D] uppercase">Office Admin Dispatch Ping</span>
+                                </div>
+                                <form onSubmit={handleSendPing} className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                                    <select 
+                                        value={pingTargetTech} 
+                                        onChange={(e) => setPingTargetTech(e.target.value)}
+                                        className="px-2.5 py-1.5 border rounded-lg text-xs bg-gray-50 font-semibold"
+                                    >
+                                        {teamMembers.map(m => <option key={m.id} value={m.name || m.email}>{m.name || m.email}</option>)}
+                                    </select>
+                                    <input 
+                                        type="text" 
+                                        value={pingMessage} 
+                                        onChange={(e) => setPingMessage(e.target.value)}
+                                        placeholder="Type urgent dispatch instruction..." 
+                                        className="flex-1 md:w-64 px-3 py-1.5 border rounded-lg text-xs bg-white"
+                                        required
+                                    />
+                                    <button type="submit" className="bg-[#1B365D] hover:bg-[#152a4b] text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-xs whitespace-nowrap">
+                                        Send Ping
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+
                         {activeTab === 'schedule' && (
                             <div className="space-y-4">
-                                <div className="bg-white p-3 rounded-xl shadow-sm border flex justify-between items-center">
-                                    <div className="flex space-x-1">
-                                        <button onClick={() => setScheduleView('week')} className={`px-3 py-1 rounded-lg text-xs font-bold ${scheduleView === 'week' ? 'bg-[#1B365D] text-white' : 'bg-gray-100'}`}>Week</button>
-                                        <button onClick={() => setScheduleView('kanban')} className={`px-3 py-1 rounded-lg text-xs font-bold ${scheduleView === 'kanban' ? 'bg-[#1B365D] text-white' : 'bg-gray-100'}`}>Kanban</button>
+                                <div className="bg-white p-3 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-3">
+                                    <div className="flex items-center space-x-1">
+                                        <button onClick={() => setScheduleView('day')} className={`px-2.5 py-1 rounded-lg text-xs font-bold ${scheduleView === 'day' ? 'bg-[#1B365D] text-white' : 'bg-gray-100 text-gray-600'}`}>Day</button>
+                                        <button onClick={() => setScheduleView('week')} className={`px-2.5 py-1 rounded-lg text-xs font-bold ${scheduleView === 'week' ? 'bg-[#1B365D] text-white' : 'bg-gray-100 text-gray-600'}`}>Week</button>
+                                        <button onClick={() => setScheduleView('month')} className={`px-2.5 py-1 rounded-lg text-xs font-bold ${scheduleView === 'month' ? 'bg-[#1B365D] text-white' : 'bg-gray-100 text-gray-600'}`}>Month</button>
+                                        <button onClick={() => setScheduleView('kanban')} className={`px-2.5 py-1 rounded-lg text-xs font-bold ${scheduleView === 'kanban' ? 'bg-[#1B365D] text-white' : 'bg-gray-100 text-gray-600'}`}>Kanban</button>
                                     </div>
+
+                                    {scheduleView !== 'kanban' && (
+                                        <div className="flex items-center space-x-2 bg-gray-50 px-2 py-1 rounded-lg border">
+                                            <button onClick={() => handleNavigateTime(-1)} className="w-6 h-6 flex items-center justify-center bg-white border rounded text-xs font-bold text-[#1B365D]">&larr;</button>
+                                            <span className="text-[11px] font-bold text-[#1B365D] px-1">{currentDate.toDateString()}</span>
+                                            <button onClick={() => handleNavigateTime(1)} className="w-6 h-6 flex items-center justify-center bg-white border rounded text-xs font-bold text-[#1B365D]">&rarr;</button>
+                                        </div>
+                                    )}
+
                                     <label className="flex items-center space-x-2 text-xs font-semibold cursor-pointer">
-                                        <input type="checkbox" checked={filterMyJobsOnly} onChange={(e) => setFilterMyJobsOnly(e.target.checked)} className="rounded" />
+                                        <input type="checkbox" checked={filterMyJobsOnly} onChange={(e) => setFilterMyJobsOnly(e.target.checked)} className="rounded text-[#1B365D]" />
                                         <span>My Jobs Only</span>
                                     </label>
                                 </div>
 
                                 {scheduleView === 'week' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
                                         {Array.from({ length: 7 }).map((_, idx) => {
                                             const d = new Date(currentDate);
                                             d.setDate(d.getDate() - d.getDay() + idx + 1);
@@ -441,16 +745,29 @@
                                             const dayJobs = displayedJobs.filter(j => j.date === dateStr);
 
                                             return (
-                                                <div key={dateStr} className="bg-white rounded-xl p-3 border min-h-[400px]">
+                                                <div 
+                                                    key={dateStr}
+                                                    onDragOver={handleDragOver}
+                                                    onDrop={(e) => handleDropOnDate(e, dateStr)}
+                                                    className="bg-white rounded-xl p-3 border border-gray-200 min-h-[400px] flex flex-col"
+                                                >
                                                     <div className="text-center pb-2 border-b mb-2">
-                                                        <span className="text-[10px] font-bold text-gray-400 block uppercase">{d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
-                                                        <span className="text-xs font-bold text-[#1B365D]">{dateStr}</span>
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase">{d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                                                        <span className="text-xs font-bold text-[#1B365D] block">{dateStr}</span>
                                                     </div>
-                                                    <div className="space-y-2">
+                                                    <div className="space-y-2 flex-1">
                                                         {dayJobs.map(job => (
-                                                            <div key={job.id} onClick={() => setSelectedJob(job)} className={`border p-2.5 rounded-xl cursor-pointer ${getTechColorStyle(job.primaryTech)}`}>
-                                                                <span className="text-[10px] font-bold block">{job.id}</span>
-                                                                <h5 className="font-bold text-xs truncate">{job.client}</h5>
+                                                            <div 
+                                                                key={job.id}
+                                                                draggable
+                                                                onDragStart={(e) => handleDragStart(e, job.id)}
+                                                                onClick={() => setSelectedJob(job)}
+                                                                className={`border p-2.5 rounded-xl cursor-pointer transition shadow-xs relative ${getTechColorStyle(job.primaryTech)}`}
+                                                            >
+                                                                {!job.primaryTech && <div className="text-[9px] bg-amber-500 text-white font-bold px-1 rounded mb-1 inline-block">⚠️ Unassigned</div>}
+                                                                {hasUnsignedSwms(job) && <span className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">⚠️ SWMS</span>}
+                                                                <span className="text-[10px] font-bold uppercase block text-gray-500">{job.id}</span>
+                                                                <h5 className="font-bold text-xs truncate mt-0.5 text-[#1B365D]">{job.client}</h5>
                                                                 <p className="text-[10px] opacity-80 truncate">📍 {job.address}</p>
                                                             </div>
                                                         ))}
@@ -460,79 +777,125 @@
                                         })}
                                     </div>
                                 )}
+
+                                {scheduleView === 'kanban' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {['Morning Dispatch', 'Afternoon Dispatch', 'Completed'].map(col => (
+                                            <div 
+                                                key={col}
+                                                onDragOver={handleDragOver}
+                                                onDrop={(e) => handleDropOnColumn(e, col)}
+                                                className="bg-white rounded-xl p-4 border border-gray-200 min-h-[500px] flex flex-col"
+                                            >
+                                                <h4 className="font-bold text-xs uppercase text-[#1B365D] pb-3 border-b mb-3">{col}</h4>
+                                                <div className="space-y-3 flex-1">
+                                                    {displayedJobs.filter(j => (j.column || 'Morning Dispatch') === col).map(job => (
+                                                        <div 
+                                                            key={job.id}
+                                                            draggable
+                                                            onDragStart={(e) => handleDragStart(e, job.id)}
+                                                            onClick={() => setSelectedJob(job)}
+                                                            className={`border p-3 rounded-xl cursor-pointer transition shadow-xs relative ${getTechColorStyle(job.primaryTech)}`}
+                                                        >
+                                                            <span className="text-[10px] font-bold uppercase text-gray-500">{job.id}</span>
+                                                            <h5 className="font-bold text-xs mt-1 text-[#1B365D]">{job.client}</h5>
+                                                            <p className="text-[10px] opacity-80 mt-0.5">📍 {job.address}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'parts' && isAdmin && (
+                            <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
+                                <div className="flex justify-between items-center border-b pb-3">
+                                    <h3 className="text-sm font-bold uppercase text-[#1B365D]">📦 Master Parts & Inventory Catalog</h3>
+                                    <input type="text" value={partsSearchQuery} onChange={(e) => setPartsSearchQuery(e.target.value)} placeholder="Search parts..." className="px-3 py-1.5 border rounded text-xs w-64" />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="md:col-span-2 space-y-2 max-h-[400px] overflow-y-auto">
+                                        {filteredCatalog.map(part => (
+                                            <div key={part.id} className="flex justify-between items-center p-3 bg-gray-50 border rounded-xl text-xs">
+                                                <div>
+                                                    <span className="font-bold text-[#1B365D] text-sm block">{part.name}</span>
+                                                    <span className="text-[10px] bg-blue-100 text-blue-800 px-1 rounded font-mono mr-2">{part.sku}</span>
+                                                    <span className="text-gray-500">Category: {part.category}</span>
+                                                </div>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={() => handleEditMasterPart(part)} className="text-blue-600 font-bold px-2 py-1 bg-white border rounded">Edit</button>
+                                                    <button onClick={() => handleDeleteMasterPart(part.id)} className="text-red-500 font-bold px-2 py-1 bg-white border rounded">&times;</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="bg-gray-50 p-4 rounded-xl border space-y-3">
+                                        <h4 className="text-xs font-bold text-[#1B365D] uppercase">{editingPartId !== null ? 'Edit Part' : 'Add New Part'}</h4>
+                                        <form onSubmit={handleSaveMasterPart} className="space-y-3">
+                                            <input type="text" value={newPartName} onChange={(e) => setNewPartName(e.target.value)} placeholder="Part Name" className="w-full px-3 py-2 border rounded text-xs bg-white" required />
+                                            <input type="text" value={newPartSku} onChange={(e) => setNewPartSku(e.target.value)} placeholder="SKU / Code" className="w-full px-3 py-2 border rounded text-xs bg-white font-mono" />
+                                            <select value={newPartCategory} onChange={(e) => setNewPartCategory(e.target.value)} className="w-full px-3 py-2 border rounded text-xs bg-white">
+                                                <option value="Cabling">Cabling</option>
+                                                <option value="Inverters">Inverters</option>
+                                                <option value="Batteries">Batteries</option>
+                                                <option value="Switchgear">Switchgear</option>
+                                                <option value="Connectors">Connectors</option>
+                                            </select>
+                                            <button type="submit" className="w-full bg-[#1B365D] text-white py-2 rounded font-bold text-xs">Save Part</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'swms' && isAdmin && (
+                            <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
+                                <h3 className="text-sm font-bold uppercase text-[#1B365D]">🛡️ Master SWMS Template Library</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {swmsTemplates.map((swms, i) => (
+                                        <div key={i} className="p-4 bg-gray-50 border rounded-xl space-y-2">
+                                            <h5 className="font-bold text-sm text-[#1B365D]">{swms.title}</h5>
+                                            <p className="text-xs text-gray-600"><strong>Key Hazards:</strong> {swms.hazards.join(', ')}</p>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
                         {activeTab === 'team' && isAdmin && (
                             <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
-                                <div>
-                                    <h3 className="text-sm font-bold uppercase text-[#1B365D]">👥 Team Roster & Invitations</h3>
-                                    <p className="text-xs text-gray-500">Send invite links to new technicians. Each member is assigned a unique color theme for job cards.</p>
-                                </div>
-
+                                <h3 className="text-sm font-bold uppercase text-[#1B365D]">👥 Team Roster & Invitations</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="bg-gray-50 p-4 rounded-xl border space-y-3">
                                         <h4 className="text-xs font-bold text-[#1B365D] uppercase">📩 Send Access Invitation Link</h4>
                                         <form onSubmit={handleSendInvite} className="space-y-3">
-                                            <div>
-                                                <label className="block text-[11px] font-bold mb-1">Technician Name</label>
-                                                <input 
-                                                    type="text" 
-                                                    value={inviteName} 
-                                                    onChange={(e) => setInviteName(e.target.value)} 
-                                                    placeholder="e.g. Nic Borrot" 
-                                                    className="w-full px-3 py-2 border rounded text-xs bg-white" 
-                                                    required 
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[11px] font-bold mb-1">Email Address</label>
-                                                <input 
-                                                    type="email" 
-                                                    value={inviteEmail} 
-                                                    onChange={(e) => setInviteEmail(e.target.value)} 
-                                                    placeholder="nic@megawatt.com" 
-                                                    className="w-full px-3 py-2 border rounded text-xs bg-white" 
-                                                    required 
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[11px] font-bold mb-1">Initial Access Role</label>
-                                                <select 
-                                                    value={inviteRole} 
-                                                    onChange={(e) => setInviteRole(e.target.value)} 
-                                                    className="w-full px-3 py-2 border rounded text-xs bg-white font-semibold"
-                                                >
-                                                    <option value="Field Tech">Field Tech (Standard Access)</option>
-                                                    <option value="Admin">Admin (Full Access)</option>
-                                                </select>
-                                            </div>
-                                            <button 
-                                                type="submit" 
-                                                disabled={isInviting}
-                                                className="w-full bg-[#1B365D] text-white py-2 rounded font-bold text-xs hover:bg-[#152a4b]"
-                                            >
-                                                {isInviting ? 'Sending Invite Link...' : '📧 Send Activation Link'}
+                                            <input type="text" value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Technician Name" className="w-full px-3 py-2 border rounded text-xs bg-white" required />
+                                            <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email Address" className="w-full px-3 py-2 border rounded text-xs bg-white" required />
+                                            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} className="w-full px-3 py-2 border rounded text-xs bg-white font-semibold">
+                                                <option value="Field Tech">Field Tech</option>
+                                                <option value="Admin">Admin</option>
+                                            </select>
+                                            <button type="submit" disabled={isInviting} className="w-full bg-[#1B365D] text-white py-2 rounded font-bold text-xs">
+                                                {isInviting ? 'Sending...' : '📧 Send Activation Link'}
                                             </button>
                                         </form>
                                     </div>
-
                                     <div className="space-y-3">
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase">Registered Team & Roles ({teamMembers.length})</h4>
+                                        <h4 className="text-xs font-bold text-gray-500 uppercase">Registered Team ({teamMembers.length})</h4>
                                         {teamMembers.map((m) => (
-                                            <div key={m.id} className={`flex justify-between items-center p-3 border rounded-xl text-xs ${m.color || 'bg-gray-50 border-gray-200'}`}>
+                                            <div key={m.id} className={`flex justify-between items-center p-3 border rounded-xl text-xs ${m.color || 'bg-gray-50'}`}>
                                                 <div>
                                                     <strong className="text-sm block">{m.name || 'Unnamed Tech'}</strong>
                                                     <span className="opacity-75 font-mono text-[10px]">{m.email}</span>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
-                                                    <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${m.access === 'Admin' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-white/70'}`}>
+                                                    <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${m.access === 'Admin' ? 'bg-amber-100 text-amber-900 border' : 'bg-white/70'}`}>
                                                         {m.access || 'Field Tech'}
                                                     </span>
-                                                    <button 
-                                                        onClick={() => handleToggleUserRole(m.id, m.access)} 
-                                                        className="text-indigo-600 hover:text-indigo-900 font-bold px-2 py-1 bg-white border rounded shadow-2xs"
-                                                    >
+                                                    <button onClick={() => handleToggleUserRole(m.id, m.access)} className="text-indigo-600 font-bold px-2 py-1 bg-white border rounded">
                                                         {m.access === 'Admin' ? 'Downgrade' : '⚡ Upgrade'}
                                                     </button>
                                                 </div>
@@ -544,18 +907,219 @@
                         )}
                     </main>
 
+                    {/* JOB DETAILS MODAL */}
+                    {selectedJob && (() => {
+                        const template = swmsTemplates.find(s => s.title === selectedJob.swmsTemplateTitle) || swmsTemplates[1];
+                        return (
+                            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
+                                <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+                                    <div className="flex justify-between items-start border-b pb-3">
+                                        <div>
+                                            <span className="text-xs font-bold text-[#00AEEF]">{selectedJob.id}</span>
+                                            <h3 className="font-bold text-base text-[#1B365D]">{selectedJob.title}</h3>
+                                            <p className="text-xs text-gray-700 font-semibold">{selectedJob.client}</p>
+                                            <div className="flex items-center space-x-2 mt-1">
+                                                <span className="text-xs text-gray-500">📍 {selectedJob.address}</span>
+                                                <button onClick={() => openGoogleMaps(selectedJob.address)} className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">🧭 Directions</button>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => setSelectedJob(null)} className="text-gray-400 hover:text-gray-600 text-lg font-bold">&times;</button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg border">
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Scheduled Date</label>
+                                            <input type="date" value={selectedJob.date} onChange={(e) => handleUpdateJobInModal({...selectedJob, date: e.target.value})} className="w-full px-2 py-1.5 border rounded text-xs bg-white font-semibold" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Primary Tech</label>
+                                            <select value={selectedJob.primaryTech || ''} onChange={(e) => handleUpdateJobInModal({...selectedJob, primaryTech: e.target.value})} className="w-full px-2 py-1.5 border rounded text-xs bg-white font-semibold">
+                                                <option value="">-- Unassigned --</option>
+                                                {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Assigned Crew</label>
+                                            <div className="bg-white p-1.5 border rounded text-xs max-h-24 overflow-y-auto space-y-1">
+                                                {teamMembers.map(m => {
+                                                    const isChecked = selectedJob.assignedTechs?.includes(m.name);
+                                                    return (
+                                                        <label key={m.id} className="flex items-center space-x-2 text-[11px] cursor-pointer">
+                                                            <input type="checkbox" checked={isChecked} onChange={(e) => {
+                                                                let updatedTechs = [...(selectedJob.assignedTechs || [])];
+                                                                let updatedSigs = { ...(selectedJob.swmsSignatures || {}) };
+                                                                if (e.target.checked) {
+                                                                    if (!updatedTechs.includes(m.name)) updatedTechs.push(m.name);
+                                                                    if (!updatedSigs[m.name]) updatedSigs[m.name] = { signed: false, timestamp: '' };
+                                                                } else {
+                                                                    updatedTechs = updatedTechs.filter(t => t !== m.name);
+                                                                    delete updatedSigs[m.name];
+                                                                }
+                                                                handleUpdateJobInModal({...selectedJob, assignedTechs: updatedTechs, swmsSignatures: updatedSigs});
+                                                            }} />
+                                                            <span>{m.name}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ON-SITE TIME TRACKING */}
+                                    <div className="space-y-2 bg-gray-50 p-4 rounded-xl border">
+                                        <h4 className="font-bold text-xs uppercase text-[#1B365D]">⏱️ On-Site Time Tracking</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button onClick={() => {
+                                                const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                                handleUpdateJobInModal({...selectedJob, status: 'On Site', timeLogs: { ...selectedJob.timeLogs, startTime: now }});
+                                            }} className={`p-3 rounded-xl border text-center transition flex flex-col items-center justify-center ${selectedJob.timeLogs?.startTime ? 'bg-emerald-50 border-emerald-300' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md'}`}>
+                                                <span className={`text-[11px] font-extrabold uppercase ${selectedJob.timeLogs?.startTime ? 'text-emerald-800' : 'text-white'}`}>▶ Start Job</span>
+                                                <span className={`text-xs font-bold mt-0.5 ${selectedJob.timeLogs?.startTime ? 'text-emerald-900' : 'text-emerald-100'}`}>{selectedJob.timeLogs?.startTime ? `Started: ${selectedJob.timeLogs.startTime}` : 'Click to Start'}</span>
+                                            </button>
+                                            <button onClick={() => {
+                                                const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                                handleUpdateJobInModal({...selectedJob, status: 'Completed', column: 'Completed', timeLogs: { ...selectedJob.timeLogs, completeTime: now }});
+                                            }} className={`p-3 rounded-xl border text-center transition flex flex-col items-center justify-center ${selectedJob.timeLogs?.completeTime ? 'bg-red-50 border-red-300' : 'bg-rose-600 hover:bg-rose-700 text-white shadow-md'}`}>
+                                                <span className={`text-[11px] font-extrabold uppercase ${selectedJob.timeLogs?.completeTime ? 'text-red-800' : 'text-white'}`}>✓ Complete Job</span>
+                                                <span className={`text-xs font-bold mt-0.5 ${selectedJob.timeLogs?.completeTime ? 'text-red-900' : 'text-rose-100'}`}>{selectedJob.timeLogs?.completeTime ? `Finished: ${selectedJob.timeLogs.completeTime}` : 'Click to Complete'}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* DOCUMENTS VAULT */}
+                                    <div className="space-y-3 bg-indigo-50/50 border border-indigo-200 p-4 rounded-xl">
+                                        <h4 className="font-bold text-xs uppercase text-[#1B365D]">📂 Client & Job Documents Vault</h4>
+                                        <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                                            {(selectedJob.documents || []).map((doc) => (
+                                                <div key={doc.id} className="flex justify-between items-center bg-white p-2.5 rounded-lg border text-xs shadow-2xs">
+                                                    <div className="flex items-center space-x-2 truncate">
+                                                        <span>📄</span>
+                                                        <span className="font-bold text-gray-800 truncate">{doc.name}</span>
+                                                    </div>
+                                                    <button onClick={() => handleDeleteDocument(doc.id)} className="text-red-500 font-extrabold text-sm">&times;</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <label className="border-2 border-dashed border-indigo-300 hover:border-[#00AEEF] rounded-lg p-3 flex flex-col items-center justify-center cursor-pointer bg-white transition text-center">
+                                            <span className="text-xl">📁</span>
+                                            <span className="text-xs font-bold text-[#1B365D] mt-1">Upload Client Briefs, Permits, or Specs</span>
+                                            <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={handleFileUpload} className="hidden" />
+                                        </label>
+                                    </div>
+
+                                    {/* MATERIALS USED */}
+                                    <div className="space-y-3 bg-blue-50/60 border border-blue-200 p-4 rounded-xl">
+                                        <h4 className="font-bold text-xs uppercase text-[#1B365D]">📦 Materials Used & Inventory Log</h4>
+                                        <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                                            {(selectedJob.materialsUsed || []).map((mat) => (
+                                                <div key={mat.id} className="flex justify-between items-center bg-white p-2 rounded-lg border text-xs">
+                                                    <span className="font-semibold text-gray-800">{mat.item}</span>
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Qty: {mat.qty}</span>
+                                                        <button onClick={() => handleDeleteMaterialFromJob(mat.id)} className="text-red-500 font-extrabold">&times;</button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <select value={newMaterialItem} onChange={(e) => setNewMaterialItem(e.target.value)} className="flex-1 px-2 py-1.5 border rounded text-xs bg-white">
+                                                {masterPartsCatalog.map((part) => <option key={part.id} value={part.name}>{part.name} ({part.sku})</option>)}
+                                            </select>
+                                            <input type="number" min="1" value={newMaterialQty} onChange={(e) => setNewMaterialQty(e.target.value)} className="w-16 px-2 py-1.5 border rounded text-xs text-center font-bold" />
+                                            <button onClick={handleAddMaterialToJob} className="bg-[#1B365D] text-white px-3 py-1.5 rounded text-xs font-bold">+ Add</button>
+                                        </div>
+                                    </div>
+
+                                    {/* SWMS SIGN-OFF */}
+                                    <div className="border border-amber-200 bg-amber-50/50 p-4 rounded-xl space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="font-bold text-xs uppercase text-amber-900">🛡️ SWMS Compliance</h4>
+                                            <select value={selectedJob.swmsTemplateTitle || 'Replacement Inverter'} onChange={(e) => handleUpdateJobInModal({...selectedJob, swmsTemplateTitle: e.target.value})} className="px-2 py-1 border rounded text-xs bg-white font-bold">
+                                                {swmsTemplates.map(s => <option key={s.title} value={s.title}>{s.title}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="text-xs bg-white p-3 rounded-lg border space-y-1">
+                                            <p className="font-bold text-[#1B365D]">Hazards:</p>
+                                            <ul className="list-disc pl-4">{template.hazards.map((h, i) => <li key={i}>{h}</li>)}</ul>
+                                        </div>
+                                    </div>
+
+                                    {/* PHOTO LOCKER */}
+                                    <div className="space-y-3 bg-gray-50 p-4 rounded-xl border">
+                                        <h4 className="font-bold text-xs uppercase text-[#1B365D]">📷 On-Site Photo Locker</h4>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {(selectedJob.photos || []).map((photoUrl, idx) => (
+                                                <div key={idx} className="relative aspect-square bg-gray-200 rounded-lg overflow-hidden border">
+                                                    <img src={photoUrl} alt="Site capture" className="w-full h-full object-cover" />
+                                                </div>
+                                            ))}
+                                            <label className="border-2 border-dashed border-gray-300 hover:border-[#00AEEF] rounded-lg aspect-square flex flex-col items-center justify-center cursor-pointer bg-white transition p-1 text-center">
+                                                <span className="text-lg">📸</span>
+                                                <span className="text-[10px] font-bold text-[#1B365D] mt-1">Take Photo</span>
+                                                <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} className="hidden" />
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end pt-2">
+                                        <button onClick={() => setSelectedJob(null)} className="bg-[#1B365D] text-white px-5 py-2 rounded-lg text-xs font-bold shadow">Save & Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* CREATE JOB MODAL */}
                     {showCreateModal && (
                         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                             <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-4">
-                                <h3 className="font-bold text-sm uppercase text-[#1B365D]">Create Job</h3>
+                                <h3 className="font-bold text-sm uppercase text-[#1B365D]">Create & Dispatch Job</h3>
                                 <form onSubmit={handleCreateJob} className="space-y-3">
-                                    <input type="text" value={newJobClient} onChange={(e) => setNewJobClient(e.target.value)} placeholder="Client Name" className="w-full px-3 py-2 border rounded text-xs" required />
-                                    <input type="text" value={newJobTitle} onChange={(e) => setNewJobTitle(e.target.value)} placeholder="Job Scope" className="w-full px-3 py-2 border rounded text-xs" required />
-                                    <input type="text" value={newJobAddress} onChange={(e) => setNewJobAddress(e.target.value)} placeholder="Site Address" className="w-full px-3 py-2 border rounded text-xs" required />
-                                    <input type="date" value={newJobDate} onChange={(e) => setNewJobDate(e.target.value)} className="w-full px-3 py-2 border rounded text-xs" required />
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 mb-1">Client Name</label>
+                                        <div className="relative">
+                                            <input type="text" value={newJobClient} onChange={(e) => handleClientInput(e.target.value)} placeholder="Type customer name..." className="w-full px-3 py-2 border rounded-lg text-xs bg-white font-medium" required />
+                                            {clientSuggestions.length > 0 && !isClientSelected && (
+                                                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                                                    {clientSuggestions.map((c, i) => (
+                                                        <div key={i} onClick={() => selectExistingClient(c)} className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer border-b">
+                                                            <strong>{c.name}</strong> <span className="text-gray-400 block text-[10px]">{c.address}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 mb-1">Job Scope / Title</label>
+                                        <input type="text" value={newJobTitle} onChange={(e) => setNewJobTitle(e.target.value)} placeholder="e.g. Inverter Replacement" className="w-full px-3 py-2 border rounded-lg text-xs" required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 mb-1">Site Address</label>
+                                        <input type="text" value={newJobAddress} onChange={(e) => setNewJobAddress(e.target.value)} placeholder="Full address" className="w-full px-3 py-2 border rounded-lg text-xs" required />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 mb-1">Primary Tech</label>
+                                            <select value={newJobPrimaryTech} onChange={(e) => setNewJobPrimaryTech(e.target.value)} className="w-full px-2 py-1.5 border rounded-lg text-xs">
+                                                <option value="">-- Unassigned --</option>
+                                                {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 mb-1">SWMS Template</label>
+                                            <select value={newJobSwmsTemplate} onChange={(e) => setNewJobSwmsTemplate(e.target.value)} className="w-full px-2 py-1.5 border rounded-lg text-xs">
+                                                {swmsTemplates.map(s => <option key={s.title} value={s.title}>{s.title}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 mb-1">Date</label>
+                                        <input type="date" value={newJobDate} onChange={(e) => setNewJobDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-xs" required />
+                                    </div>
                                     <div className="flex justify-end space-x-2 pt-2">
-                                        <button type="button" onClick={() => setShowCreateModal(false)} className="px-3 py-1.5 border rounded text-xs">Cancel</button>
-                                        <button type="submit" className="bg-[#1B365D] text-white px-4 py-1.5 rounded text-xs font-bold">Save Job</button>
+                                        <button type="button" onClick={() => setShowCreateModal(false)} className="px-3 py-1.5 border rounded-lg text-xs">Cancel</button>
+                                        <button type="submit" className="bg-[#1B365D] text-white px-4 py-1.5 rounded-lg text-xs font-bold">Save Job</button>
                                     </div>
                                 </form>
                             </div>
