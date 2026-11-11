@@ -43,7 +43,6 @@
             const [isLoggedIn, setIsLoggedIn] = React.useState(false);
             const [activeTab, setActiveTab] = React.useState('schedule');
             
-            // First time login name setup modal state
             const [showNameModal, setShowNameModal] = React.useState(false);
             const [profileInputName, setProfileInputName] = React.useState('');
 
@@ -131,7 +130,6 @@
                 'bg-indigo-50 border-indigo-300 text-indigo-900'
             ];
 
-            // Listen to Firebase Auth state
             React.useEffect(() => {
                 const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
                     if (user) {
@@ -156,7 +154,6 @@
                 return () => unsubscribeAuth();
             }, []);
 
-            // Sync Firestore Collections
             React.useEffect(() => {
                 if (!isLoggedIn) return;
 
@@ -585,7 +582,6 @@
 
             return (
                 <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-800">
-                    {/* FIRST-TIME NAME SETUP MODAL */}
                     {showNameModal && (
                         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
                             <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4 border-t-4 border-[#00AEEF]">
@@ -736,6 +732,40 @@
                                     </label>
                                 </div>
 
+                                {/* DAY VIEW */}
+                                {scheduleView === 'day' && (
+                                    <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm">
+                                        <div className="flex justify-between items-center border-b pb-3">
+                                            <h3 className="text-xs md:text-sm font-bold text-[#1B365D]">Daily Schedule: {currentDate.toISOString().split('T')[0]}</h3>
+                                            <span className="text-[11px] text-gray-500 font-semibold">08:00 AM – 05:00 PM</span>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'].map(hour => {
+                                                const hourJobs = displayedJobs.filter(j => j.date === currentDate.toISOString().split('T')[0]);
+                                                return (
+                                                    <div key={hour} className="flex flex-col md:flex-row items-start border-b border-gray-100 pb-3 last:border-b-0 gap-2">
+                                                        <span className="w-24 text-xs font-bold text-gray-400 pt-1">{hour}</span>
+                                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                                                            {hourJobs.length > 0 && hour === '09:00 AM' ? (
+                                                                hourJobs.map(job => (
+                                                                    <div key={job.id} onClick={() => setSelectedJob(job)} className={`p-3 border rounded-xl cursor-pointer shadow-xs transition hover:shadow-md relative ${getTechColorStyle(job.primaryTech)}`}>
+                                                                        <span className="text-[10px] font-extrabold uppercase">{job.id}</span>
+                                                                        <h4 className="font-bold text-sm text-[#1B365D]">{job.client}</h4>
+                                                                        <p className="text-xs opacity-90 mt-0.5">📍 {job.address}</p>
+                                                                    </div>
+                                                                ))
+                                                            ) : (
+                                                                <div className="py-1 text-xs text-gray-300 italic">No jobs scheduled</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* WEEK VIEW */}
                                 {scheduleView === 'week' && (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
                                         {Array.from({ length: 7 }).map((_, idx) => {
@@ -778,6 +808,64 @@
                                     </div>
                                 )}
 
+                                {/* MONTH VIEW */}
+                                {scheduleView === 'month' && (
+                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3 overflow-x-auto">
+                                        <div className="text-center font-bold text-sm text-[#1B365D] uppercase tracking-wide">
+                                            {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                                        </div>
+                                        <div className="grid grid-cols-7 gap-2 min-w-[600px]">
+                                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                                                <div key={d} className="text-center text-[10px] font-bold text-gray-400 uppercase">{d}</div>
+                                            ))}
+                                            {(() => {
+                                                const year = currentDate.getFullYear();
+                                                const month = currentDate.getMonth();
+                                                const firstDayIndex = new Date(year, month, 1).getDay();
+                                                const totalDays = new Date(year, month + 1, 0).getDate();
+                                                const daysArray = [];
+
+                                                for (let i = 0; i < firstDayIndex; i++) {
+                                                    daysArray.push(<div key={`empty-${i}`} className="p-2 bg-gray-50/50 rounded-lg min-h-[90px]"></div>);
+                                                }
+
+                                                for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+                                                    const formattedMonth = String(month + 1).padStart(2, '0');
+                                                    const formattedDay = String(dayNum).padStart(2, '0');
+                                                    const dateStr = `${year}-${formattedMonth}-${formattedDay}`;
+                                                    const dayJobs = displayedJobs.filter(j => j.date === dateStr);
+
+                                                    daysArray.push(
+                                                        <div 
+                                                            key={dateStr}
+                                                            onDragOver={handleDragOver}
+                                                            onDrop={(e) => handleDropOnDate(e, dateStr)}
+                                                            className="bg-white p-2 rounded-lg border border-gray-200 min-h-[100px] flex flex-col"
+                                                        >
+                                                            <span className="text-xs font-bold text-[#1B365D] mb-1">{dayNum}</span>
+                                                            <div className="space-y-1 flex-1 overflow-y-auto">
+                                                                {dayJobs.map(job => (
+                                                                    <div 
+                                                                        key={job.id}
+                                                                        draggable
+                                                                        onDragStart={(e) => handleDragStart(e, job.id)}
+                                                                        onClick={() => setSelectedJob(job)}
+                                                                        className={`border p-1 rounded cursor-pointer text-[10px] ${getTechColorStyle(job.primaryTech)}`}
+                                                                    >
+                                                                        <span className="font-bold block truncate">{job.client}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+                                                return daysArray;
+                                            })()}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* KANBAN VIEW */}
                                 {scheduleView === 'kanban' && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {['Morning Dispatch', 'Afternoon Dispatch', 'Completed'].map(col => (
