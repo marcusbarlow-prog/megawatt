@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Project Organizer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center gap-4 shadow-sm">
+    <div class="flex items-center space-x-3">
+      <div class="bg-indigo-600 p-2 rounded-lg shadow-sm">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold tracking-wide text-slate-900">Personal Organizer</h1>
+        <p class="text-xs text-slate-500">Project & Task Manager</p>
+      </div>
+    </div>
+
+    <!-- Search Input -->
+    <div class="flex-1 max-w-xs mx-4">
+      <div class="relative">
+        <input type="text" id="search-input" oninput="handleSearch()" placeholder="Search active & archived tasks..." class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-4 py-1.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+      </div>
+    </div>
+
+    <!-- Navigation & Controls -->
+    <div class="flex items-center space-x-3">
+      <button onclick="openAvailabilityModal()" class="bg-white hover:bg-slate-50 text-indigo-600 px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 border border-indigo-200 shadow-sm">
+        <span>📅 Upcoming Availability</span>
+      </button>
+      <button onclick="openCategoryManagerModal()" class="bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 border border-slate-200 shadow-sm">
+        <span>⚙️ Categories</span>
+      </button>
+      <div class="bg-slate-200 p-1 rounded-lg flex space-x-1">
+        <button id="btn-list-view" onclick="switchView('list')" class="px-3 py-1.5 rounded-md text-sm font-medium bg-indigo-600 text-white shadow-sm transition">List</button>
+        <button id="btn-calendar-view" onclick="switchView('calendar')" class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-950 transition">Month</button>
+        <button id="btn-day-view" onclick="switchView('day')" class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-950 transition">Day</button>
+        <button id="btn-archive-view" onclick="switchView('archive')" class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-950 transition">📁 Archive</button>
+      </div>
+      <button onclick="openModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 shadow-sm transition">
+        <span>+ New Job</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 p-6 overflow-hidden flex flex-col">
+
+    <!-- Search Overlay Results -->
+    <div id="view-search-results" class="hidden flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col overflow-y-auto custom-scrollbar mb-4">
+      <h2 class="text-lg font-bold text-slate-900 mb-4">Search Results</h2>
+      <div id="search-results-container" class="space-y-3"></div>
+    </div>
+
+    <!-- List View -->
+    <div id="view-list" class="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold text-slate-900">Active Jobs</h2>
+        <span id="active-count" class="text-xs bg-slate-100 border border-slate-200 px-3 py-1 rounded-full text-slate-700 font-bold">0 Jobs</span>
+      </div>
+      <div id="active-job-list" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1"></div>
+    </div>
+
+    <!-- Calendar View (Month) -->
+    <div id="view-calendar" class="hidden flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col">
+      <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
+        <h2 id="calendar-month-year" class="text-xl font-bold text-slate-900"></h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Quick Month Jump Dropdown -->
+          <select id="month-jump-select" onchange="jumpToMonth(this.value)" class="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500"></select>
+          <button onclick="prevMonth()" class="bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium">Previous</button>
+          <button onclick="todayMonth()" class="bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium">Today</button>
+          <button onclick="nextMonth()" class="bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium">Next</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-500 mb-2">
+        <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+      </div>
+      <div id="calendar-grid" class="flex-1 grid grid-cols-7 grid-rows-6 gap-2 overflow-y-auto custom-scrollbar"></div>
+    </div>
+
+    <!-- Dedicated Day View -->
+    <div id="view-day" class="hidden flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col overflow-hidden">
+      <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
+        <div>
+          <h2 id="day-view-title" class="text-xl font-bold text-slate-900"></h2>
+          <p id="day-view-subtitle" class="text-xs text-slate-500">Detailed schedule & task checklist</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="date" id="day-picker-input" onchange="changeDayPicker(this.value)" class="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500">
+          <button onclick="prevDay()" class="bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium">Previous Day</button>
+          <button onclick="todayDay()" class="bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium">Today</button>
+          <button onclick="nextDay()" class="bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium">Next Day</button>
+        </div>
+      </div>
+      <div id="day-tasks-container" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1"></div>
+    </div>
+
+    <!-- Completed Archive View -->
+    <div id="view-archive" class="hidden flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Completed Archive</h2>
+          <p class="text-xs text-slate-500">Completed jobs and subtasks are stored here to keep your calendar & list clean.</p>
+        </div>
+        <span id="archive-count" class="text-xs bg-emerald-50 border border-emerald-300 text-emerald-700 px-3 py-1 rounded-full font-bold">0 Completed</span>
+      </div>
+      <div id="archive-job-list" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1"></div>
+    </div>
+  </main>
+
+  <!-- Job Edit/Create Modal -->
+  <div id="job-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white border border-slate-200 shadow-xl rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 id="modal-title" class="text-lg font-bold text-slate-900">Edit Job</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 overflow-y-auto space-y-5 custom-scrollbar flex-1">
+        <input type="hidden" id="modal-job-id">
+        
+        <!-- Job Title & Category -->
+        <div class="grid grid-cols-3 gap-4">
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Job Title</label>
+            <input type="text" id="modal-title-input" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Category</label>
+            <select id="modal-category-input" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500"></select>
+          </div>
+        </div>
+
+        <!-- Target Date, Time & Completion Checkbox -->
+        <div class="grid grid-cols-3 gap-3 items-center">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Target Date</label>
+            <input type="date" id="modal-date-input" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Target Time</label>
+            <input type="time" id="modal-time-input" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div class="flex items-center pt-5 gap-2">
+            <input type="checkbox" id="modal-completed-input" class="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer">
+            <label for="modal-completed-input" class="text-xs font-medium text-slate-700 cursor-pointer">Completed (Archive)</label>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Notes & Specifications</label>
+          <textarea id="modal-notes-input" rows="3" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500" placeholder="Dimensions, project notes..."></textarea>
+        </div>
+
+        <!-- Subtasks Section -->
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-2">Subtasks / Checklist</label>
+          <div id="modal-subtasks-container" class="space-y-2 mb-3"></div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input type="text" id="new-subtask-title" placeholder="Subtask description..." class="md:col-span-2 bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500">
+            <input type="date" id="new-subtask-date" class="bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500">
+            <div class="flex gap-1">
+              <input type="time" id="new-subtask-time" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500">
+              <button type="button" onclick="addSubtask()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Photos Section -->
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-2">Photos</label>
+          <div id="modal-photos-container" class="grid grid-cols-4 gap-3 mb-3"></div>
+          <input type="file" id="modal-photo-upload" accept="image/*" class="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer">
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between">
+        <button type="button" onclick="deleteJob()" class="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-4 py-2 rounded-lg text-sm font-medium transition">Delete Job</button>
+        <div class="flex space-x-2">
+          <button type="button" onclick="closeModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition">Cancel</button>
+          <button type="button" onclick="saveJob()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upcoming Availability Modal -->
+  <div id="availability-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white border border-slate-200 shadow-xl rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2"><span>📅</span> Upcoming Due Dates & Availability</h3>
+        <button onclick="closeAvailabilityModal()" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+      <div id="availability-content" class="p-6 overflow-y-auto space-y-3 custom-scrollbar flex-1"></div>
+      <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+        <button onclick="closeAvailabilityModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Manager Modal -->
+  <div id="category-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white border border-slate-200 shadow-xl rounded-xl max-w-md w-full flex flex-col overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+        <h3 class="text-lg font-bold text-slate-900">Manage Categories</h3>
+        <button onclick="closeCategoryManagerModal()" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <!-- Create Category -->
+        <div class="flex gap-2 items-center">
+          <input type="text" id="new-cat-name" placeholder="New Category Name..." class="flex-1 bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500">
+          <input type="color" id="new-cat-color" value="#6366f1" class="h-9 w-10 bg-slate-50 border border-slate-300 rounded cursor-pointer p-0.5">
+          <button onclick="addCategory()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium">Add</button>
+        </div>
+
+        <!-- Category List -->
+        <div id="category-list" class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pt-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let categories = JSON.parse(localStorage.getItem('personal_organizer_categories')) || [
+      { id: 'cat-work', name: 'Work', color: '#2563eb' },
+      { id: 'cat-youtube', name: 'YouTube', color: '#dc2626' },
+      { id: 'cat-cong', name: 'Cong', color: '#7c3aed' },
+      { id: 'cat-house', name: 'House', color: '#059669' },
+      { id: 'cat-bills', name: 'Bills', color: '#d97706' }
+    ];
+
+    let jobs = JSON.parse(localStorage.getItem('personal_organizer_jobs')) || [
+      {
+        id: '1',
+        title: 'Workbench Build',
+        category: 'cat-house',
+        completed: false,
+        date: '2026-11-20',
+        time: '09:00',
+        notes: '2000mm x 800mm timber frame build.',
+        photos: [],
+        subtasks: [
+          { id: 's1', title: 'Cut framing timber', due: '2026-11-12', time: '10:30', completed: false },
+          { id: 's2', title: 'Assemble base', due: '2026-11-15', time: '14:00', completed: true }
+        ]
+      }
+    ];
+
+    let currentView = 'list';
+    let currentCalendarDate = new Date();
+    let currentDayDate = new Date();
+
+    function saveData() {
+      localStorage.setItem('personal_organizer_jobs', JSON.stringify(jobs));
+      localStorage.setItem('personal_organizer_categories', JSON.stringify(categories));
+      render();
+    }
+
+    function render() {
+      populateCategorySelects();
+      renderListView();
+      renderCalendar();
+      renderDayView();
+      renderArchiveView();
+    }
+
+    function populateCategorySelects() {
+      const select = document.getElementById('modal-category-input');
+      select.innerHTML = '';
+      categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.id;
+        opt.innerText = cat.name;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderListView() {
+      const activeContainer = document.getElementById('active-job-list');
+      activeContainer.innerHTML = '';
+
+      const activeJobs = jobs.filter(j => !j.completed);
+      document.getElementById('active-count').innerText = `${activeJobs.length} Jobs`;
+
+      if (activeJobs.length === 0) {
+        activeContainer.innerHTML = `<div class="text-center py-12 text-slate-400 text-sm">No active jobs right now.</div>`;
+        return;
+      }
+
+      activeJobs.forEach(job => {
+        const item = createJobRow(job);
+        activeContainer.appendChild(item);
+      });
+    }
+
+    function renderArchiveView() {
+      const archiveContainer = document.getElementById('archive-job-list');
+      archiveContainer.innerHTML = '';
+
+      const archivedJobs = jobs.filter(j => j.completed);
+      document.getElementById('archive-count').innerText = `${archivedJobs.length} Completed`;
+
+      if (archivedJobs.length === 0) {
+        archiveContainer.innerHTML = `<div class="text-center py-12 text-slate-400 text-sm">No completed jobs in archive.</div>`;
+        return;
+      }
+
+      archivedJobs.forEach(job => {
+        const item = createJobRow(job, true);
+        archiveContainer.appendChild(item);
+      });
+    }
+
+    function createJobRow(job, isArchive = false) {
+      const el = document.createElement('div');
+      el.className = 'bg-slate-50 border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4';
+      el.onclick = (e) => {
+        if (!e.target.classList.contains('checkbox-toggle')) {
+          openModal(job.id);
+        }
+      };
+
+      const cat = categories.find(c => c.id === job.category);
+      const catColor = cat ? cat.color : '#6b7280';
+      const catName = cat ? cat.name : 'Uncategorized';
+
+      const subtaskCount = job.subtasks.length;
+      const activeSubtasks = job.subtasks.filter(s => !s.completed);
+      const completedSubtasksCount = job.subtasks.filter(s => s.completed).length;
+
+      let subtaskSummaryHtml = '';
+      if (subtaskCount > 0) {
+        subtaskSummaryHtml = `
+          <div class="text-xs text-slate-500 mt-2 flex flex-wrap gap-2 items-center">
+            <span class="bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">Subtasks: ${completedSubtasksCount}/${subtaskCount}</span>
+            ${activeSubtasks.map(s => `<span class="bg-white text-slate-700 px-2 py-0.5 rounded border border-slate-200 text-[11px]">• ${s.title} ${s.due ? `(${s.due}${s.time ? ' ' + s.time : ''})` : ''}</span>`).join('')}
+          </div>
+        `;
+      }
+
+      let photoBadge = '';
+      if (job.photos && job.photos.length > 0) {
+        photoBadge = `<span class="text-xs bg-white text-slate-600 px-2 py-0.5 rounded border border-slate-200 shadow-sm">📷 ${job.photos.length}</span>`;
+      }
+
+      const dateTimeStr = job.date ? `Due: ${job.date}${job.time ? ' at ' + job.time : ''}` : '';
+
+      el.innerHTML = `
+        <div class="flex-1">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" ${job.completed ? 'checked' : ''} onclick="toggleJobCompleted('${job.id}', event)" class="checkbox-toggle w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer">
+            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${catColor}"></span>
+            <h4 class="font-semibold text-slate-900 text-base ${job.completed ? 'line-through text-slate-400' : ''}">${job.title}</h4>
+            <span class="text-[10px] font-semibold tracking-wider uppercase text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded shadow-sm">${catName}</span>
+          </div>
+          ${job.notes ? `<p class="text-xs text-slate-500 mt-1 pl-7 line-clamp-1">${job.notes}</p>` : ''}
+          <div class="pl-7">${subtaskSummaryHtml}</div>
+        </div>
+
+        <div class="flex items-center gap-3 pl-7 md:pl-0">
+          ${photoBadge}
+          ${dateTimeStr ? `<span class="text-xs bg-white text-slate-700 border border-slate-200 px-2.5 py-1 rounded shadow-sm">${dateTimeStr}</span>` : ''}
+        </div>
+      `;
+      return el;
+    }
+
+    function toggleJobCompleted(id, event) {
+      event.stopPropagation();
+      const job = jobs.find(j => j.id === id);
+      if (job) {
+        job.completed = !job.completed;
+        saveData();
+      }
+    }
+
+    function switchView(view) {
+      currentView = view;
+      document.getElementById('view-list').classList.add('hidden');
+      document.getElementById('view-calendar').classList.add('hidden');
+      document.getElementById('view-day').classList.add('hidden');
+      document.getElementById('view-archive').classList.add('hidden');
+      document.getElementById('view-search-results').classList.add('hidden');
+
+      document.getElementById('btn-list-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-950 transition';
+      document.getElementById('btn-calendar-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-950 transition';
+      document.getElementById('btn-day-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-950 transition';
+      document.getElementById('btn-archive-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-950 transition';
+
+      if (view === 'list') {
+        document.getElementById('view-list').classList.remove('hidden');
+        document.getElementById('btn-list-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium bg-indigo-600 text-white shadow-sm transition';
+      } else if (view === 'calendar') {
+        document.getElementById('view-calendar').classList.remove('hidden');
+        document.getElementById('btn-calendar-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium bg-indigo-600 text-white shadow-sm transition';
+      } else if (view === 'day') {
+        document.getElementById('view-day').classList.remove('hidden');
+        document.getElementById('btn-day-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium bg-indigo-600 text-white shadow-sm transition';
+        renderDayView();
+      } else if (view === 'archive') {
+        document.getElementById('view-archive').classList.remove('hidden');
+        document.getElementById('btn-archive-view').className = 'px-3 py-1.5 rounded-md text-sm font-medium bg-indigo-600 text-white shadow-sm transition';
+      }
+    }
+
+    function handleSearch() {
+      const term = document.getElementById('search-input').value.trim().toLowerCase();
+      const container = document.getElementById('search-results-container');
+      const searchOverlay = document.getElementById('view-search-results');
+
+      if (!term) {
+        searchOverlay.classList.add('hidden');
+        switchView(currentView);
+        return;
+      }
+
+      document.getElementById('view-list').classList.add('hidden');
+      document.getElementById('view-calendar').classList.add('hidden');
+      document.getElementById('view-day').classList.add('hidden');
+      document.getElementById('view-archive').classList.add('hidden');
+      searchOverlay.classList.remove('hidden');
+
+      container.innerHTML = '';
+      const matched = jobs.filter(j => {
+        const matchTitle = j.title.toLowerCase().includes(term);
+        const matchNotes = (j.notes || '').toLowerCase().includes(term);
+        const matchSubtasks = j.subtasks.some(st => st.title.toLowerCase().includes(term));
+        return matchTitle || matchNotes || matchSubtasks;
+      });
+
+      if (matched.length === 0) {
+        container.innerHTML = `<div class="text-center py-12 text-slate-400 text-sm">No matching tasks or notes found.</div>`;
+        return;
+      }
+
+      matched.forEach(j => {
+        const row = createJobRow(j, j.completed);
+        container.appendChild(row);
+      });
+    }
+
+    function populateMonthJumpDropdown(selectedYear, selectedMonth) {
+      const select = document.getElementById('month-jump-select');
+      select.innerHTML = '';
+
+      const today = new Date();
+      const startYear = today.getFullYear() - 2;
+      const endYear = today.getFullYear() + 3;
+
+      for (let y = startYear; y <= endYear; y++) {
+        for (let m = 0; m < 12; m++) {
+          const dateObj = new Date(y, m, 1);
+          const val = `${y}-${String(m + 1).padStart(2, '0')}`;
+          const label = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.innerText = label;
+          if (y === selectedYear && m === selectedMonth) {
+            opt.selected = true;
+          }
+          select.appendChild(opt);
+        }
+      }
+    }
+
+    function jumpToMonth(val) {
+      const [y, m] = val.split('-');
+      currentCalendarDate = new Date(parseInt(y), parseInt(m) - 1, 1);
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById('calendar-grid');
+      grid.innerHTML = '';
+
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+
+      document.getElementById('calendar-month-year').innerText = new Date(year, month).toLocaleString('default', { month: 'long', year: 'numeric' });
+      populateMonthJumpDropdown(year, month);
+
+      const firstDayIndex = new Date(year, month, 1).getDay();
+      const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
+      const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+      const activeJobs = jobs.filter(j => !j.completed);
+
+      function renderDayCell(dateStr, isCurrentMonth, dayNum, fullDateObj) {
+        const cell = document.createElement('div');
+        cell.className = `rounded-lg p-2 min-h-[90px] border flex flex-col gap-1 overflow-y-auto custom-scrollbar cursor-pointer shadow-sm ${isCurrentMonth ? 'bg-slate-50 border-slate-200 hover:border-indigo-400' : 'bg-slate-100/50 border-slate-200/60 opacity-40'}`;
+
+        cell.onclick = (e) => {
+          if (e.target === cell || e.target.classList.contains('day-num-header')) {
+            currentDayDate = fullDateObj;
+            switchView('day');
+          }
+        };
+
+        const dayHeader = document.createElement('div');
+        dayHeader.className = 'flex justify-between items-center day-num-header';
+        const dayNumSpan = document.createElement('span');
+        dayNumSpan.className = `text-xs font-semibold day-num-header ${isCurrentMonth ? 'text-slate-700' : 'text-slate-400'}`;
+        dayNumSpan.innerText = dayNum;
+        dayHeader.appendChild(dayNumSpan);
+        cell.appendChild(dayHeader);
+
+        activeJobs.forEach(j => {
+          const cat = categories.find(c => c.id === j.category);
+          const catColor = cat ? cat.color : '#6366f1';
+
+          // Main job tag
+          if (j.date === dateStr) {
+            const tag = document.createElement('div');
+            tag.className = 'text-[10px] text-white p-1 rounded font-medium cursor-pointer truncate shadow-sm';
+            tag.style.backgroundColor = catColor;
+            const timeLabel = j.time ? `[${j.time}] ` : '';
+            tag.innerText = `${timeLabel}${j.title}`;
+            tag.onclick = (e) => { e.stopPropagation(); openModal(j.id); };
+            cell.appendChild(tag);
+          }
+
+          // Subtask tag
+          j.subtasks.filter(st => !st.completed).forEach(st => {
+            if (st.due === dateStr) {
+              const tag = document.createElement('div');
+              tag.className = 'text-[10px] text-white p-1 rounded font-medium cursor-pointer truncate shadow-sm';
+              tag.style.backgroundColor = catColor;
+              const timeLabel = st.time ? `[${st.time}] ` : '';
+              tag.innerText = `${timeLabel}${j.title}: ${st.title}`;
+              tag.onclick = (e) => { e.stopPropagation(); openModal(j.id); };
+              cell.appendChild(tag);
+            }
+          });
+        });
+
+        return cell;
+      }
+
+      // 1. Render trailing days from previous month
+      for (let i = firstDayIndex - 1; i >= 0; i--) {
+        const dayNum = daysInPrevMonth - i;
+        const prevMonthDate = new Date(year, month - 1, dayNum);
+        const dateStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+        grid.appendChild(renderDayCell(dateStr, false, dayNum, prevMonthDate));
+      }
+
+      // 2. Render current month days
+      for (let day = 1; day <= daysInCurrentMonth; day++) {
+        const dateObj = new Date(year, month, day);
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        grid.appendChild(renderDayCell(dateStr, true, day, dateObj));
+      }
+
+      // 3. Render leading days from next month
+      const totalCellsSoFar = firstDayIndex + daysInCurrentMonth;
+      const remainingCells = totalCellsSoFar <= 35 ? 35 - totalCellsSoFar : 42 - totalCellsSoFar;
+      for (let day = 1; day <= remainingCells; day++) {
+        const nextMonthDate = new Date(year, month + 1, day);
+        const dateStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        grid.appendChild(renderDayCell(dateStr, false, day, nextMonthDate));
+      }
+    }
+
+    function prevMonth() {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+      renderCalendar();
+    }
+    function nextMonth() {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+      renderCalendar();
+    }
+    function todayMonth() {
+      currentCalendarDate = new Date();
+      renderCalendar();
+    }
+
+    // --- DAY VIEW IMPLEMENTATION ---
+    function renderDayView() {
+      const container = document.getElementById('day-tasks-container');
+      container.innerHTML = '';
+
+      const year = currentDayDate.getFullYear();
+      const month = currentDayDate.getMonth();
+      const day = currentDayDate.getDate();
+
+      const formattedDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      document.getElementById('day-picker-input').value = formattedDateStr;
+
+      const dateTitle = currentDayDate.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      document.getElementById('day-view-title').innerText = dateTitle;
+
+      const activeJobs = jobs.filter(j => !j.completed);
+
+      let dayItems = [];
+
+      activeJobs.forEach(j => {
+        const cat = categories.find(c => c.id === j.category);
+        const catColor = cat ? cat.color : '#6366f1';
+        const catName = cat ? cat.name : 'Uncategorized';
+
+        if (j.date === formattedDateStr) {
+          dayItems.push({
+            id: j.id,
+            type: 'Job',
+            title: j.title,
+            time: j.time || '',
+            notes: j.notes || '',
+            catColor: catColor,
+            catName: catName,
+            subtasks: j.subtasks,
+            photos: j.photos || [],
+            jobRef: j
+          });
+        }
+
+        j.subtasks.filter(st => !st.completed && st.due === formattedDateStr).forEach(st => {
+          dayItems.push({
+            id: j.id,
+            type: 'Subtask',
+            title: st.title,
+            parentTitle: j.title,
+            time: st.time || '',
+            notes: '',
+            catColor: catColor,
+            catName: catName,
+            jobRef: j
+          });
+        });
+      });
+
+      dayItems.sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+
+      document.getElementById('day-view-subtitle').innerText = `${dayItems.length} items scheduled for this day`;
+
+      if (dayItems.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-16 text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+            <p class="text-base font-medium text-slate-600">No tasks or subtasks scheduled for this day.</p>
+            <p class="text-xs text-slate-400 mt-1">Use the date navigation or click "+ New Job" to schedule tasks.</p>
+          </div>
+        `;
+        return;
+      }
+
+      dayItems.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-50 border border-slate-200 rounded-xl p-5 hover:border-indigo-500 transition cursor-pointer shadow-sm flex flex-col gap-3';
+        card.onclick = () => openModal(item.id);
+
+        const timeLabel = item.time ? `🕒 ${item.time}` : 'All Day';
+
+        if (item.type === 'Job') {
+          const subtaskCount = item.subtasks.length;
+          const activeSubtasks = item.subtasks.filter(s => !s.completed);
+          const completedSubtasksCount = item.subtasks.filter(s => s.completed).length;
+
+          card.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div class="flex items-center gap-3">
+                <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${item.catColor}"></span>
+                <span class="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded text-slate-700 bg-white border border-slate-200 shadow-sm">${item.catName}</span>
+                <span class="text-xs font-semibold px-2.5 py-0.5 rounded text-indigo-700 bg-indigo-50 border border-indigo-200">${timeLabel}</span>
+              </div>
+              <span class="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-1 rounded border border-indigo-200">Main Job</span>
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">${item.title}</h3>
+              ${item.notes ? `<p class="text-xs text-slate-600 mt-1 bg-white p-2.5 rounded border border-slate-200 shadow-sm">${item.notes}</p>` : ''}
+            </div>
+            ${subtaskCount > 0 ? `
+              <div class="pt-1">
+                <div class="text-xs font-semibold text-slate-500 mb-1">Subtasks (${completedSubtasksCount}/${subtaskCount})</div>
+                <div class="space-y-1.5">
+                  ${item.subtasks.map(s => `
+                    <div class="text-xs flex items-center gap-2 text-slate-700 bg-white p-1.5 rounded border border-slate-200 shadow-sm">
+                      <span class="${s.completed ? 'line-through text-slate-400' : ''}">${s.completed ? '✓' : '•'} ${s.title}</span>
+                      ${s.due ? `<span class="text-[10px] text-slate-400 ml-auto">Due: ${s.due}${s.time ? ' ' + s.time : ''}</span>` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+          `;
+        } else {
+          card.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div class="flex items-center gap-3">
+                <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${item.catColor}"></span>
+                <span class="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded text-slate-700 bg-white border border-slate-200 shadow-sm">${item.catName}</span>
+                <span class="text-xs font-semibold px-2.5 py-0.5 rounded text-emerald-700 bg-emerald-50 border border-emerald-200">${timeLabel}</span>
+              </div>
+              <span class="text-xs bg-emerald-50 text-emerald-700 font-semibold px-2.5 py-1 rounded border border-emerald-200">Subtask</span>
+            </div>
+            <div>
+              <div class="text-xs text-indigo-600 font-medium">Part of: ${item.parentTitle}</div>
+              <h3 class="text-base font-bold text-slate-900 mt-0.5">${item.title}</h3>
+            </div>
+          `;
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    function prevDay() {
+      currentDayDate.setDate(currentDayDate.getDate() - 1);
+      renderDayView();
+    }
+    function nextDay() {
+      currentDayDate.setDate(currentDayDate.getDate() + 1);
+      renderDayView();
+    }
+    function todayDay() {
+      currentDayDate = new Date();
+      renderDayView();
+    }
+    function changeDayPicker(val) {
+      if (!val) return;
+      const parts = val.split('-');
+      currentDayDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      renderDayView();
+    }
+
+    // Availability / Quick Reference Modal
+    function openAvailabilityModal() {
+      const container = document.getElementById('availability-content');
+      container.innerHTML = '';
+
+      const activeJobs = jobs.filter(j => !j.completed);
+      
+      let timeline = [];
+      activeJobs.forEach(j => {
+        if (j.date) {
+          timeline.push({ date: j.date, time: j.time || '', title: j.title, type: 'Job', cat: j.category, id: j.id });
+        }
+        j.subtasks.filter(st => !st.completed).forEach(st => {
+          if (st.due) {
+            timeline.push({ date: st.due, time: st.time || '', title: `${j.title}: ${st.title}`, type: 'Subtask', cat: j.category, id: j.id });
+          }
+        });
+      });
+
+      timeline.sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return (a.time || '00:00').localeCompare(b.time || '00:00');
+      });
+
+      if (timeline.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-slate-400 text-sm">No scheduled due dates found for active tasks.</div>`;
+      } else {
+        const group = document.createElement('div');
+        group.className = 'space-y-2';
+        timeline.forEach(item => {
+          const cat = categories.find(c => c.id === item.cat);
+          const catColor = cat ? cat.color : '#6366f1';
+          const catName = cat ? cat.name : '';
+
+          const row = document.createElement('div');
+          row.className = 'bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3 cursor-pointer hover:border-indigo-500 transition shadow-sm';
+          row.onclick = () => {
+            closeAvailabilityModal();
+            openModal(item.id);
+          };
+
+          row.innerHTML = `
+            <div class="flex items-center gap-3">
+              <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${catColor}"></span>
+              <div>
+                <h4 class="font-medium text-sm text-slate-900">${item.title}</h4>
+                <p class="text-[11px] text-slate-500 uppercase tracking-wider">${item.type} ${catName ? '• ' + catName : ''}</p>
+              </div>
+            </div>
+            <div class="text-right flex-shrink-0">
+              <span class="text-xs bg-white text-indigo-600 border border-slate-200 px-2.5 py-1 rounded font-medium shadow-sm">${item.date}${item.time ? ' ' + item.time : ''}</span>
+            </div>
+          `;
+          group.appendChild(row);
+        });
+        container.appendChild(group);
+      }
+
+      document.getElementById('availability-modal').classList.remove('hidden');
+    }
+
+    function closeAvailabilityModal() {
+      document.getElementById('availability-modal').classList.add('hidden');
+    }
+
+    let activeJobId = null;
+
+    function openModal(id = null) {
+      activeJobId = id;
+      populateCategorySelects();
+      const modal = document.getElementById('job-modal');
+      modal.classList.remove('hidden');
+
+      if (id) {
+        document.getElementById('modal-title').innerText = 'Edit Job';
+        const job = jobs.find(j => j.id === id);
+        document.getElementById('modal-job-id').value = job.id;
+        document.getElementById('modal-title-input').value = job.title;
+        document.getElementById('modal-category-input').value = job.category || (categories[0] ? categories[0].id : '');
+        document.getElementById('modal-completed-input').checked = !!job.completed;
+        document.getElementById('modal-date-input').value = job.date || '';
+        document.getElementById('modal-time-input').value = job.time || '';
+        document.getElementById('modal-notes-input').value = job.notes || '';
+      } else {
+        document.getElementById('modal-title').innerText = 'Create New Job';
+        document.getElementById('modal-job-id').value = '';
+        document.getElementById('modal-title-input').value = '';
+        document.getElementById('modal-category-input').value = categories[0] ? categories[0].id : '';
+        document.getElementById('modal-completed-input').checked = false;
+        document.getElementById('modal-date-input').value = '';
+        document.getElementById('modal-time-input').value = '';
+        document.getElementById('modal-notes-input').value = '';
+      }
+
+      renderSubtasksModal();
+      renderPhotosModal();
+    }
+
+    function closeModal() {
+      document.getElementById('job-modal').classList.add('hidden');
+    }
+
+    function renderSubtasksModal() {
+      const container = document.getElementById('modal-subtasks-container');
+      container.innerHTML = '';
+
+      const job = jobs.find(j => j.id === activeJobId);
+      const subtasks = job ? job.subtasks : [];
+      const cat = job ? categories.find(c => c.id === job.category) : null;
+      const catColor = cat ? cat.color : '#6366f1';
+
+      subtasks.forEach((st, idx) => {
+        const item = document.createElement('div');
+        item.className = 'flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2';
+        const timeDisplay = st.time ? ` ${st.time}` : '';
+        item.innerHTML = `
+          <input type="checkbox" ${st.completed ? 'checked' : ''} onchange="toggleSubtask(${idx})" class="rounded border-slate-300 text-indigo-600">
+          <span class="flex-1 text-xs text-slate-800 ${st.completed ? 'line-through text-slate-400' : ''}">${st.title}</span>
+          ${st.due ? `<span class="text-[10px] text-white px-2 py-0.5 rounded font-medium shadow-sm" style="background-color: ${catColor}">${st.due}${timeDisplay}</span>` : ''}
+          <button onclick="removeSubtask(${idx})" class="text-slate-400 hover:text-red-600 text-xs px-1">&times;</button>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function addSubtask() {
+      const titleInput = document.getElementById('new-subtask-title');
+      const dateInput = document.getElementById('new-subtask-date');
+      const timeInput = document.getElementById('new-subtask-time');
+
+      if (!titleInput.value.trim()) return;
+
+      const job = jobs.find(j => j.id === activeJobId);
+      const newSubtask = {
+        id: Date.now().toString(),
+        title: titleInput.value.trim(),
+        due: dateInput.value,
+        time: timeInput.value,
+        completed: false
+      };
+
+      if (job) {
+        job.subtasks.push(newSubtask);
+        renderSubtasksModal();
+      }
+
+      titleInput.value = '';
+      dateInput.value = '';
+      timeInput.value = '';
+      saveData();
+    }
+
+    function toggleSubtask(index) {
+      const job = jobs.find(j => j.id === activeJobId);
+      if (job && job.subtasks[index]) {
+        job.subtasks[index].completed = !job.subtasks[index].completed;
+        renderSubtasksModal();
+        saveData();
+      }
+    }
+
+    function removeSubtask(index) {
+      const job = jobs.find(j => j.id === activeJobId);
+      if (job) {
+        job.subtasks.splice(index, 1);
+        renderSubtasksModal();
+        saveData();
+      }
+    }
+
+    function renderPhotosModal() {
+      const container = document.getElementById('modal-photos-container');
+      container.innerHTML = '';
+      const job = jobs.find(j => j.id === activeJobId);
+      if (!job || !job.photos) return;
+
+      job.photos.forEach((src, idx) => {
+        const div = document.createElement('div');
+        div.className = 'relative group rounded border border-slate-200 overflow-hidden h-16 shadow-sm';
+        div.innerHTML = `
+          <img src="${src}" class="w-full h-full object-cover">
+          <button onclick="removePhoto(${idx})" class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition">&times;</button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    document.getElementById('modal-photo-upload').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const job = jobs.find(j => j.id === activeJobId);
+        if (job) {
+          if (!job.photos) job.photos = [];
+          job.photos.push(evt.target.result);
+          renderPhotosModal();
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function removePhoto(index) {
+      const job = jobs.find(j => j.id === activeJobId);
+      if (job && job.photos) {
+        job.photos.splice(index, 1);
+        renderPhotosModal();
+      }
+    }
+
+    function saveJob() {
+      const id = document.getElementById('modal-job-id').value;
+      const title = document.getElementById('modal-title-input').value.trim();
+      const category = document.getElementById('modal-category-input').value;
+      const completed = document.getElementById('modal-completed-input').checked;
+      const date = document.getElementById('modal-date-input').value;
+      const time = document.getElementById('modal-time-input').value;
+      const notes = document.getElementById('modal-notes-input').value.trim();
+
+      if (!title) return;
+
+      if (id) {
+        const job = jobs.find(j => j.id === id);
+        if (job) {
+          job.title = title;
+          job.category = category;
+          job.completed = completed;
+          job.date = date;
+          job.time = time;
+          job.notes = notes;
+        }
+      } else {
+        const newJob = {
+          id: Date.now().toString(),
+          title: title,
+          category: category,
+          completed: completed,
+          date: date,
+          time: time,
+          notes: notes,
+          photos: [],
+          subtasks: []
+        };
+        jobs.push(newJob);
+      }
+
+      closeModal();
+      saveData();
+    }
+
+    function deleteJob() {
+      if (!activeJobId) return;
+      jobs = jobs.filter(j => j.id !== activeJobId);
+      closeModal();
+      saveData();
+    }
+
+    function openCategoryManagerModal() {
+      renderCategoryList();
+      document.getElementById('category-modal').classList.remove('hidden');
+    }
+
+    function closeCategoryManagerModal() {
+      document.getElementById('category-modal').classList.add('hidden');
+    }
+
+    function renderCategoryList() {
+      const container = document.getElementById('category-list');
+      container.innerHTML = '';
+
+      categories.forEach(cat => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200';
+        div.innerHTML = `
+          <input type="color" value="${cat.color}" onchange="updateCategoryColor('${cat.id}', this.value)" class="h-6 w-7 bg-transparent border-0 cursor-pointer p-0">
+          <input type="text" value="${cat.name}" onchange="updateCategoryName('${cat.id}', this.value)" class="flex-1 bg-transparent text-sm text-slate-900 focus:outline-none">
+          <button onclick="deleteCategory('${cat.id}')" class="text-slate-400 hover:text-red-600 text-xs px-2 font-bold">&times;</button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function addCategory() {
+      const nameInput = document.getElementById('new-cat-name');
+      const colorInput = document.getElementById('new-cat-color');
+      const name = nameInput.value.trim();
+      if (!name) return;
+
+      const newCat = {
+        id: 'cat-' + Date.now(),
+        name: name,
+        color: colorInput.value
+      };
+
+      categories.push(newCat);
+      nameInput.value = '';
+      renderCategoryList();
+      saveData();
+    }
+
+    function updateCategoryColor(id, color) {
+      const cat = categories.find(c => c.id === id);
+      if (cat) {
+        cat.color = color;
+        saveData();
+      }
+    }
+
+    function updateCategoryName(id, name) {
+      const cat = categories.find(c => c.id === id);
+      if (cat && name.trim()) {
+        cat.name = name.trim();
+        saveData();
+      }
+    }
+
+    function deleteCategory(id) {
+      if (categories.length <= 1) {
+        alert("You must keep at least one category.");
+        return;
+      }
+      categories = categories.filter(c => c.id !== id);
+      renderCategoryList();
+      saveData();
+    }
+
+    render();
+  </script>
+</body>
+</html>
